@@ -2,13 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_ID="com.github.0x0086.minimizedpreviews"
+PLUGIN_ID="beer.devs.minimidezpreviews"
 PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids"
 DESTINATION="$PLASMOID_DIR/$PLUGIN_ID"
+OLD_IDS=(
+    "$PLASMOID_DIR/beer.devs.minimizedpreviews"
+    "$PLASMOID_DIR/com.github.0x0086.minimizedpreviews"
+)
 OLD_COMBINED="$PLASMOID_DIR/com.github.0x0086.macosicontasks"
 
-if ! command -v git >/dev/null 2>&1; then
-    echo "git is required. Install it with: sudo dnf install -y git" >&2
+if ! command -v kpackagetool6 >/dev/null 2>&1; then
+    echo "kpackagetool6 is required." >&2
     exit 1
 fi
 
@@ -23,37 +27,14 @@ if [[ "$PLASMA_VERSION" != 6.7.* ]]; then
     exit 1
 fi
 
-WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "$WORK_DIR"' EXIT
-SOURCE_ROOT="$WORK_DIR/plasma-desktop"
-TAG="v$PLASMA_VERSION"
-
-echo "Fetching PipeWire thumbnail component for Plasma $TAG..."
-git clone \
-    --quiet \
-    --depth 1 \
-    --single-branch \
-    --branch "$TAG" \
-    --filter=blob:none \
-    --sparse \
-    https://github.com/KDE/plasma-desktop.git \
-    "$SOURCE_ROOT"
-
-git -C "$SOURCE_ROOT" sparse-checkout set applets/taskmanager/qml
-PIPEWIRE_SOURCE="$SOURCE_ROOT/applets/taskmanager/qml/PipeWireThumbnail.qml"
-
-if [[ ! -f "$PIPEWIRE_SOURCE" ]]; then
-    echo "PipeWireThumbnail.qml was not found for Plasma $TAG." >&2
+if [[ ! -f "$ROOT_DIR/package/contents/ui/PipeWireThumbnail.qml" ]]; then
+    echo "The package is incomplete: PipeWireThumbnail.qml is missing." >&2
     exit 1
 fi
 
-STAGING="$WORK_DIR/package"
-cp -a "$ROOT_DIR/package" "$STAGING"
-cp "$PIPEWIRE_SOURCE" "$STAGING/contents/ui/PipeWireThumbnail.qml"
-
 mkdir -p "$PLASMOID_DIR"
-rm -rf "$DESTINATION" "$OLD_COMBINED"
-cp -a "$STAGING" "$DESTINATION"
+rm -rf "$DESTINATION" "${OLD_IDS[@]}" "$OLD_COMBINED"
+kpackagetool6 --type Plasma/Applet --install "$ROOT_DIR/package"
 
 kbuildsycoca6 >/dev/null 2>&1 || true
 

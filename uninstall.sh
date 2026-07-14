@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/com.github.0x0086.minimizedpreviews"
+kpackagetool6 --type Plasma/Applet --remove beer.devs.minimidezpreviews 2>/dev/null || true
 kbuildsycoca6 >/dev/null 2>&1 || true
 
 echo "Removed: Minimized Window Previews"

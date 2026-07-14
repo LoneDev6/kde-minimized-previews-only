@@ -9,16 +9,23 @@ PlasmaCore.ToolTipArea {
     required property int taskIndex
     required property var taskModel
     required property var sourceModel
+    property bool desktopPreview: false
+    property var desktopId
+    property string desktopName: ""
 
     readonly property var modelIndex: sourceModel.makeModelIndex(taskIndex)
-    readonly property var winId: taskModel.WinIdList && taskModel.WinIdList.length > 0
-        ? taskModel.WinIdList[0]
-        : undefined
+    readonly property var winId: desktopPreview
+        ? taskModel.winId
+        : (taskModel.WinIdList && taskModel.WinIdList.length > 0
+            ? taskModel.WinIdList[0]
+            : undefined)
     readonly property bool thumbnailAvailable: thumbnailLoader.item
         && thumbnailLoader.item.hasThumbnail
 
-    mainText: taskModel.AppName || ""
-    subText: taskModel.display || ""
+    mainText: desktopPreview ? taskModel.title : (taskModel.AppName || "")
+    subText: desktopPreview
+        ? desktopName
+        : (taskModel.display || "")
 
     scale: pointer.hovered ? 1.05 : 1.0
 
@@ -88,14 +95,20 @@ PlasmaCore.ToolTipArea {
     TapHandler {
         acceptedButtons: Qt.LeftButton
         onTapped: {
-            root.sourceModel.requestToggleMinimized(root.modelIndex)
+            if (!root.desktopPreview) {
+                root.sourceModel.requestToggleMinimized(root.modelIndex)
+            }
             root.sourceModel.requestActivate(root.modelIndex)
         }
     }
 
     TapHandler {
         acceptedButtons: Qt.MiddleButton
-        onTapped: root.sourceModel.requestClose(root.modelIndex)
+        onTapped: {
+            if (!root.desktopPreview) {
+                root.sourceModel.requestClose(root.modelIndex)
+            }
+        }
     }
 
     HoverHandler {

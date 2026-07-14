@@ -12,7 +12,8 @@ PlasmoidItem {
     Plasmoid.constraintHints: Plasmoid.CanFillArea
 
     readonly property bool vertical: Plasmoid.formFactor === PlasmaCore.Types.Vertical
-    readonly property int taskCount: tasksModel.count
+    property var desktopPreviewTasks: []
+    readonly property int taskCount: tasksModel.count + desktopPreviewTasks.length
     readonly property real spacing: Math.max(2, Kirigami.Units.smallSpacing)
     readonly property real margin: 3
     readonly property real crossSize: Math.max(24, vertical ? width : height)
@@ -36,6 +37,10 @@ PlasmoidItem {
         id: activityInfo
     }
 
+    TaskManager.VirtualDesktopInfo {
+        id: virtualDesktopInfo
+    }
+
     TaskManager.TasksModel {
         id: tasksModel
 
@@ -55,6 +60,124 @@ PlasmoidItem {
         groupMode: TaskManager.TasksModel.GroupDisabled
         sortMode: TaskManager.TasksModel.SortLastActivated
     }
+
+    TaskManager.TasksModel {
+        id: allTasksModel
+
+        filterByCurrentVirtualDesktop: false
+        filterByScreen: false
+        filterByActivity: false
+        hideActivatedLaunchers: true
+        launcherList: []
+        separateLaunchers: true
+        groupMode: TaskManager.TasksModel.GroupDisabled
+        sortMode: TaskManager.TasksModel.SortVirtualDesktop
+    }
+
+    function rebuildDesktopPreviewTasks() {
+        const desktopIds = virtualDesktopInfo.desktopIds;
+        const desktopNames = virtualDesktopInfo.desktopNames;
+        const currentDesktop = virtualDesktopInfo.currentDesktop;
+        const windowsByDesktop = {};
+
+        for (let desktopIndex = 0; desktopIndex < desktopIds.length; ++desktopIndex) {
+            windowsByDesktop[String(desktopIds[desktopIndex])] = [];
+        }
+
+        for (let row = 0; row < allTasksModel.count; ++row) {
+            const modelIndex = allTasksModel.makeModelIndex(row);
+            const isWindow = allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsWindow);
+            const skipTaskbar = allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.SkipTaskbar);
+            const onAllDesktops = allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsOnAllVirtualDesktops);
+            const taskDesktops = allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.VirtualDesktops) || [];
+            if (!isWindow || skipTaskbar || onAllDesktops) {
+                continue;
+            }
+
+            const activities = allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.Activities) || [];
+            if (activities.length > 0 && !activities.includes(activityInfo.currentActivity)) {
+                continue;
+            }
+
+            for (const desktopId of taskDesktops) {
+                const key = String(desktopId);
+                if (windowsByDesktop[key] !== undefined) {
+                    windowsByDesktop[key].push(row);
+                }
+            }
+        }
+
+        const nextTasks = [];
+        for (let desktopIndex = 0; desktopIndex < desktopIds.length; ++desktopIndex) {
+            const desktopId = desktopIds[desktopIndex];
+            const rows = windowsByDesktop[String(desktopId)];
+            if (String(desktopId) === String(currentDesktop) || rows.length !== 1) {
+                continue;
+            }
+
+            const row = rows[0];
+            const modelIndex = allTasksModel.makeModelIndex(row);
+            const winIds = allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.WinIdList) || [];
+            if (allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsMinimized)
+                    || winIds.length !== 1) {
+                continue;
+            }
+
+            nextTasks.push({
+                row: row,
+                desktopId: desktopId,
+                desktopName: desktopNames[desktopIndex] || String(desktopId),
+                winId: winIds[0],
+                title: allTasksModel.data(modelIndex, Qt.DisplayRole) || "",
+                appName: allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.AppName) || "",
+                decoration: allTasksModel.data(modelIndex, Qt.DecorationRole)
+            });
+        }
+
+        const oldIds = desktopPreviewTasks.map(task => `${task.desktopId}:${task.winId}`).join(",");
+        const newIds = nextTasks.map(task => `${task.desktopId}:${task.winId}`).join(",");
+        if (oldIds !== newIds) {
+            console.info(`[MinimizedPreviews] Desktop previews changed: ${oldIds || "none"} -> ${newIds || "none"}`);
+        }
+        desktopPreviewTasks = nextTasks;
+    }
+
+    function scheduleDesktopPreviewRebuild() {
+        desktopPreviewRebuildTimer.restart();
+    }
+
+    Timer {
+        id: desktopPreviewRebuildTimer
+
+        interval: 0
+        onTriggered: root.rebuildDesktopPreviewTasks()
+    }
+
+    Connections {
+        target: allTasksModel
+
+        function onCountChanged() { root.scheduleDesktopPreviewRebuild(); }
+        function onDataChanged() { root.scheduleDesktopPreviewRebuild(); }
+        function onModelReset() { root.scheduleDesktopPreviewRebuild(); }
+        function onRowsMoved() { root.scheduleDesktopPreviewRebuild(); }
+    }
+
+    Connections {
+        target: virtualDesktopInfo
+
+        function onCurrentDesktopChanged() { root.scheduleDesktopPreviewRebuild(); }
+        function onDesktopIdsChanged() { root.scheduleDesktopPreviewRebuild(); }
+        function onDesktopNamesChanged() { root.scheduleDesktopPreviewRebuild(); }
+        function onDesktopPositionsChanged() { root.scheduleDesktopPreviewRebuild(); }
+    }
+
+    Connections {
+        target: activityInfo
+
+        function onCurrentActivityChanged() { root.scheduleDesktopPreviewRebuild(); }
+    }
+
+    Component.onCompleted: scheduleDesktopPreviewRebuild()
 
     fullRepresentation: Item {
         anchors.fill: parent
@@ -99,6 +222,23 @@ PlasmoidItem {
                     sourceModel: tasksModel
                 }
             }
+
+            Repeater {
+                model: root.desktopPreviewTasks
+
+                delegate: MinimizedThumbnail {
+                    required property var modelData
+
+                    width: root.thumbnailLongSize
+                    height: root.thumbnailCrossSize
+                    taskIndex: modelData.row
+                    taskModel: modelData
+                    sourceModel: allTasksModel
+                    desktopId: modelData.desktopId
+                    desktopName: modelData.desktopName
+                    desktopPreview: true
+                }
+            }
         }
     }
 
@@ -122,6 +262,23 @@ PlasmoidItem {
                     taskIndex: index
                     taskModel: model
                     sourceModel: tasksModel
+                }
+            }
+
+            Repeater {
+                model: root.desktopPreviewTasks
+
+                delegate: MinimizedThumbnail {
+                    required property var modelData
+
+                    width: root.thumbnailCrossSize
+                    height: root.thumbnailLongSize
+                    taskIndex: modelData.row
+                    taskModel: modelData
+                    sourceModel: allTasksModel
+                    desktopId: modelData.desktopId
+                    desktopName: modelData.desktopName
+                    desktopPreview: true
                 }
             }
         }

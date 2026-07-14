@@ -3,12 +3,12 @@
   "KPlugin": {
     "Authors": [{"Name": "LoneDev6"}],
     "Category": "Windows and Tasks",
-    "Description": "Shows only minimized windows as live previews for use next to Plasma's native task manager.",
+    "Description": "Shows minimized windows and single-window virtual desktops as live previews.",
     "Icon": "window-minimize",
-    "Id": "beer.devs.minimizedpreviews",
+    "Id": "beer.devs.minimidezpreviews",
     "License": "GPL-2.0-or-later",
     "Name": "Minimized Window Previews",
-    "Version": "1.0.0"
+    "Version": "1.2.0"
   },
   "X-Plasma-API-Minimum-Version": "6.0"
 }

@@ -14,6 +14,8 @@ PipeWire.PipeWireSourceItem {
     property bool hasThumbnail: false
 
     anchors.fill: parent
+    // Workaround: MemFd trades zero-copy for reliable NVIDIA previews; re-enable DMA-BUF when KPipeWire negotiation is fixed.
+    allowDmaBuf: false
     nodeId: waylandItem.nodeId
 
     onReadyChanged: {

@@ -25,9 +25,11 @@ PlasmaCore.ToolTipArea {
         ? taskModel.winId
         : (taskModel.WinIdList?.length > 0 ? taskModel.WinIdList[0] : undefined)
     readonly property bool thumbnailAvailable: thumbnailLoader.item?.hasThumbnail || false
+    property bool completed: false
     property real entryProgress: dockRef.insideDock ? 1.0 : 0.0
     property real zoomFactor: {
-        if (_zoom <= 0 || _radius <= 0 || dockRef.smoothMouse < 0) {
+        if (_zoom <= 0 || _radius <= 0 || dockRef.smoothMouse < 0
+                || dockRef.launchBounceRunning) {
             return 1.0;
         }
         const distance = Math.abs(dockRef.smoothMouse - dockRef.baseItemCenter(zoomIndex));
@@ -45,19 +47,35 @@ PlasmaCore.ToolTipArea {
     x: tasksRoot.vertical ? 0 : itemPos
     y: tasksRoot.vertical ? itemPos : 0
     clip: false
+    active: pointer.hovered
     location: Plasmoid.location
     mainText: desktopPreview ? taskModel.title : (taskModel.AppName || "")
     subText: desktopPreview ? desktopName : (taskModel.display || "")
 
     Behavior on entryProgress {
+        enabled: root.completed
+
         NumberAnimation {
             duration: 140
             easing.type: Easing.OutCubic
         }
     }
 
+    Component.onCompleted: completed = true
+
     Item {
         id: previewFrame
+
+        HoverHandler {
+            id: pointer
+            cursorShape: Qt.PointingHandCursor
+            onHoveredChanged: {
+                if (hovered && root.dockRef.suppressedZoomIndex >= 0
+                        && root.dockRef.suppressedZoomIndex !== root.zoomIndex) {
+                    root.dockRef.suppressedZoomIndex = -1;
+                }
+            }
+        }
 
         width: tasksRoot.vertical
             ? root.tasksRoot.iconSize * root.zoomFactor
@@ -155,8 +173,4 @@ PlasmaCore.ToolTipArea {
         }
     }
 
-    HoverHandler {
-        id: pointer
-        cursorShape: Qt.PointingHandCursor
-    }
 }

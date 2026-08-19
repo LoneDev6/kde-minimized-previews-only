@@ -80,7 +80,8 @@ PlasmaCore.ToolTipArea {
     || (task.contextMenu && task.contextMenu.status === PlasmaExtras.Menu.Open)
     || (!!tasksRoot.groupDialog && tasksRoot.groupDialog.visualParent === task)
 
-    active: !inPopup && !tasksRoot.groupDialog && task.contextMenu?.status !== PlasmaExtras.Menu.Open
+    active: iconHoverHandler.hovered && !inPopup && !tasksRoot.groupDialog
+        && task.contextMenu?.status !== PlasmaExtras.Menu.Open
     interactive: model.IsWindow || mainItem.playerData
     location: Plasmoid.location
     mainItem: !Plasmoid.configuration.showToolTips || !model.IsWindow ? pinnedAppToolTipDelegate : openWindowToolTipDelegate
@@ -89,7 +90,7 @@ PlasmaCore.ToolTipArea {
     width: tasksRoot.iconSize
     height: tasksRoot.dockCrossSize
     readonly property real baseLongSize: tasksRoot.iconSize
-    readonly property int zoomIndex: index
+    readonly property int zoomIndex: tasksRoot.visibleTaskIndex(index)
 
     // Desactivamos el recorte para que el zoom y el reflejo "vuelen" fuera
     clip: false
@@ -109,7 +110,10 @@ PlasmaCore.ToolTipArea {
 
     property real zoomFactor: {
 
-        if (!dockRef || _zoom <= 0 || _radius <= 0) return 1.0;
+        if (!dockRef || _zoom <= 0 || _radius <= 0 || dockRef.launchBounceRunning
+                || attentionBounceAnimation.running || dockRef.suppressedZoomIndex === zoomIndex) {
+            return 1.0;
+        }
 
         let mousePos = dockRef.smoothMouse;
 
@@ -132,6 +136,8 @@ PlasmaCore.ToolTipArea {
     property real entryProgress: (dockRef && dockRef.insideDock) ? 1.0 : 0.0
 
     Behavior on entryProgress {
+        enabled: task.completed
+
         NumberAnimation {
             duration: 140
             easing.type: Easing.OutCubic
@@ -187,6 +193,10 @@ PlasmaCore.ToolTipArea {
 
     onContainsMouseChanged: {
         if (containsMouse) {
+            if (dockRef?.suppressedZoomIndex >= 0
+                    && dockRef.suppressedZoomIndex !== zoomIndex) {
+                dockRef.suppressedZoomIndex = -1;
+            }
             task.forceActiveFocus(Qt.MouseFocusReason);
             task.updateMainItemBindings();
         } else {
@@ -204,6 +214,9 @@ PlasmaCore.ToolTipArea {
 
     onIsWindowChanged: {
         if (model.IsWindow) {
+            if (tasksRoot.taskModelReady && dockRef) {
+                dockRef.claimLaunchBounce(zoomIndex);
+            }
             taskInitComponent.createObject(task);
             updateAudioStreams({delay: false});
         }
@@ -411,6 +424,9 @@ PlasmaCore.ToolTipArea {
             if (task.active) {
                 task.hideToolTip();
             }
+            if (task.model.IsLauncher) {
+                task.dockRef?.startLaunchBounce(task.zoomIndex);
+            }
             TaskTools.activateTask(modelIndex(), model, point.modifiers, task, Plasmoid, tasksRoot, effectWatcher.registered);
         }
     }
@@ -560,6 +576,10 @@ PlasmaCore.ToolTipArea {
         Loader {
             id: iconBox
 
+            HoverHandler {
+                id: iconHoverHandler
+            }
+
             // Mantenemos el contenedor con un tamaño fijo
             width: tasksRoot.iconSize
             height: tasksRoot.iconSize
@@ -583,14 +603,17 @@ PlasmaCore.ToolTipArea {
 
             // Desplazamiento del rebote alejándose del borde del panel
             property real bounceOffset: 0
+            readonly property real effectiveBounceOffset: bounceOffset
+                + (task.dockRef?.launchBounceIndex === task.zoomIndex
+                    ? task.dockRef.launchBounceOffset : 0)
 
             // Proyección del rebote sobre cada eje según el borde del panel; la comparten iconBox y metaIndexBadge.
             readonly property real bounceX: {
                 switch (Plasmoid.location) {
                     case PlasmaCore.Types.LeftEdge:
-                        return bounceOffset
+                        return effectiveBounceOffset
                     case PlasmaCore.Types.RightEdge:
-                        return -bounceOffset
+                        return -effectiveBounceOffset
                     default:
                         return 0
                 }
@@ -599,33 +622,35 @@ PlasmaCore.ToolTipArea {
             readonly property real bounceY: {
                 switch (Plasmoid.location) {
                     case PlasmaCore.Types.TopEdge:
-                        return bounceOffset
+                        return effectiveBounceOffset
                     case PlasmaCore.Types.BottomEdge:
-                        return -bounceOffset
+                        return -effectiveBounceOffset
                     default:
-                        return 0
+                        return tasksRoot.vertical ? 0 : -effectiveBounceOffset
                 }
             }
 
             SequentialAnimation {
-                id: bounceAnimation
-                running: task.model.IsStartup || task.model.IsDemandingAttention || (task.smartLauncherItem && task.smartLauncherItem.urgent)
+                id: attentionBounceAnimation
+                running: task.model.IsDemandingAttention
+                    || (task.smartLauncherItem && task.smartLauncherItem.urgent)
                 loops: Animation.Infinite
                 alwaysRunToEnd: true
+                onRunningChanged: {
+                    if (running && task.dockRef) {
+                        task.dockRef.suppressedZoomIndex = task.zoomIndex;
+                    }
+                }
 
-                /*
-                 * Salto base: 60% del tamaño del icono (con zoom).
-                 * Sin tope por la altura del panel: el rebote se anima fuera del layout del applet; en un panel estrecho el compositor aún puede recortar.
-                 */
-                property real jumpHeight: tasksRoot.iconSize * zoomFactor * 0.6
+                property real jumpHeight: tasksRoot.iconSize * zoomFactor * 0.35
 
                 // Animación de ascenso (impulso)
                 NumberAnimation {
                     target: iconBox
                     property: "bounceOffset"
                     from: 0
-                    to: bounceAnimation.jumpHeight
-                    duration: 300
+                    to: attentionBounceAnimation.jumpHeight
+                    duration: 140
                     easing.type: Easing.OutQuad
                 }
 
@@ -634,7 +659,7 @@ PlasmaCore.ToolTipArea {
                     target: iconBox
                     property: "bounceOffset"
                     to: 0
-                    duration: 300
+                    duration: 160
                     easing.type: Easing.InQuad
                 }
             }
@@ -722,7 +747,7 @@ PlasmaCore.ToolTipArea {
                  * Compensación 2× en coords locales del hijo: cancela el Translate del padre y aplica el rebote opuesto.
                  * Se divide por zoomFactor porque x/y sí se escalan y el Translate del padre no.
                  */
-                readonly property real bounceCompensation: iconBox.bounceOffset * 2 / zoomFactor
+                readonly property real bounceCompensation: iconBox.effectiveBounceOffset * 2 / zoomFactor
 
                 x: {
                     switch (Plasmoid.location) {
@@ -806,6 +831,25 @@ PlasmaCore.ToolTipArea {
                 active: model.IsStartup
                 sourceComponent: busyIndicator
             }
+        }
+
+        Rectangle {
+            width: 4
+            height: 4
+            radius: 2
+            color: "white"
+            opacity: 0.9
+            visible: !task.model.IsLauncher && !task.model.IsStartup
+            z: 6
+
+            anchors.horizontalCenter: tasksRoot.vertical ? undefined : iconBox.horizontalCenter
+            anchors.verticalCenter: tasksRoot.vertical ? iconBox.verticalCenter : undefined
+            anchors.top: tasksRoot.vertical ? undefined : iconBox.bottom
+            anchors.left: tasksRoot.vertical && tasksRoot.isLeftPanel ? iconBox.right : undefined
+            anchors.right: tasksRoot.vertical && !tasksRoot.isLeftPanel ? iconBox.left : undefined
+            anchors.topMargin: tasksRoot.vertical ? 0 : 1
+            anchors.leftMargin: tasksRoot.vertical && tasksRoot.isLeftPanel ? 1 : 0
+            anchors.rightMargin: tasksRoot.vertical && !tasksRoot.isLeftPanel ? 1 : 0
         }
 
     // --- META KEY TASK INDEX BADGE ---
@@ -939,6 +983,9 @@ PlasmaCore.ToolTipArea {
     ]
 
     Component.onCompleted: {
+        if (tasksRoot.taskModelReady && model.IsWindow) {
+            dockRef?.claimLaunchBounce(zoomIndex);
+        }
         if (!inPopup && model.IsWindow) {
             const component = Qt.createComponent("GroupExpanderOverlay.qml");
             component.createObject(task);

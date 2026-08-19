@@ -58,14 +58,51 @@ PlasmoidItem {
     property alias desktopPreviewRepeater: desktopPreviewRepeater
     property var desktopPreviewTasks: []
     readonly property int previewCount: minimizedPreviewRepeater.count + desktopPreviewRepeater.count
-    readonly property int zoomItemCount: taskRepeater.count + previewCount
+    readonly property int visibleTaskCount: {
+        let count = 0;
+        for (let index = 0; index < taskRepeater.count; ++index) {
+            if (taskRepeater.itemAt(index)?.visible) {
+                ++count;
+            }
+        }
+        return count;
+    }
+    readonly property int zoomItemCount: visibleTaskCount + previewCount
     readonly property real previewLongSize: Math.round(tasks.iconSize * 1.55)
+    property bool taskModelReady: false
+
+    function taskVisibleOnCurrentDesktop(taskModel) {
+        if (!Plasmoid.configuration.showOnlyCurrentDesktop
+                || taskModel.IsLauncher || taskModel.IsStartup
+                || taskModel.IsOnAllVirtualDesktops) {
+            return true;
+        }
+
+        const currentDesktop = String(virtualDesktopInfo.currentDesktop);
+        return (taskModel.VirtualDesktops || []).some(desktop => String(desktop) === currentDesktop);
+    }
+
+    function visibleTaskIndex(modelIndex) {
+        let visibleIndex = 0;
+        for (let index = 0; index < modelIndex; ++index) {
+            if (taskRepeater.itemAt(index)?.visible) {
+                ++visibleIndex;
+            }
+        }
+        return visibleIndex;
+    }
 
     function zoomItemAt(index) {
-        if (index < taskRepeater.count) {
-            return taskRepeater.itemAt(index);
+        for (let modelIndex = 0; modelIndex < taskRepeater.count; ++modelIndex) {
+            const item = taskRepeater.itemAt(modelIndex);
+            if (!item?.visible) {
+                continue;
+            }
+            if (index === 0) {
+                return item;
+            }
+            --index;
         }
-        index -= taskRepeater.count;
         if (index < minimizedPreviewRepeater.count) {
             return minimizedPreviewRepeater.itemAt(index);
         }
@@ -74,6 +111,12 @@ PlasmoidItem {
 
     function scheduleDesktopPreviewRebuild() {
         desktopPreviewRebuildTimer.restart();
+    }
+
+    Timer {
+        interval: 1500
+        running: true
+        onTriggered: tasks.taskModelReady = true
     }
 
     readonly property bool metaKeyHeld: backend.metaKeyHeld
@@ -141,8 +184,17 @@ PlasmoidItem {
             dockBodyLongSize,
             dockBodyCrossSize)
 
-    readonly property bool dockCovered: coveringWindowsModel.count > 0
+    readonly property bool dockCoveredCandidate: coveringWindowsModel.count > 0
+    property bool dockCovered: false
     property bool edgeReveal: false
+
+    onDockCoveredCandidateChanged: dockCoveredSyncTimer.restart()
+
+    Timer {
+        id: dockCoveredSyncTimer
+        interval: 0
+        onTriggered: tasks.dockCovered = tasks.dockCoveredCandidate
+    }
 
     preferredRepresentation: fullRepresentation
 
@@ -334,7 +386,7 @@ PlasmoidItem {
         for (let i = 0; i < taskItems.length - 1; ++i) {
             const task = taskItems[i];
 
-            if (task.model && !task.model.IsLauncher && !task.model.IsStartup) {
+            if (task.visible && task.model && !task.model.IsLauncher && !task.model.IsStartup) {
                 tasksModel.requestPublishDelegateGeometry(tasksModel.makeModelIndex(task.index),
                     backend.globalRect(task), task);
             }
@@ -368,7 +420,9 @@ PlasmoidItem {
         screenGeometry: Plasmoid.containment.screenGeometry
         activity: activityInfo.currentActivity
 
-        filterByVirtualDesktop: Plasmoid.configuration.showOnlyCurrentDesktop
+        // Plasma 6.7.4 can crash TaskGroupingProxyModel when this native filter
+        // removes a grouped row. Delegates apply the same filter without mutating the proxy.
+        filterByVirtualDesktop: false
         filterByScreen: Plasmoid.configuration.showOnlyCurrentScreen
         filterByActivity: Plasmoid.configuration.showOnlyCurrentActivity
         filterNotMinimized: Plasmoid.configuration.showOnlyMinimized
@@ -542,7 +596,19 @@ PlasmoidItem {
                 decoration: allPreviewTasksModel.data(modelIndex, Qt.DecorationRole)
             });
         }
-        desktopPreviewTasks = nextTasks;
+
+        const unchanged = nextTasks.length === desktopPreviewTasks.length
+            && nextTasks.every((nextTask, index) => {
+                const currentTask = desktopPreviewTasks[index];
+                return nextTask.row === currentTask.row
+                    && String(nextTask.desktopId) === String(currentTask.desktopId)
+                    && String(nextTask.winId) === String(currentTask.winId)
+                    && nextTask.desktopName === currentTask.desktopName
+                    && nextTask.title === currentTask.title;
+            });
+        if (!unchanged) {
+            desktopPreviewTasks = nextTasks;
+        }
     }
 
     Timer {
@@ -1170,6 +1236,68 @@ PlasmoidItem {
                 property real smoothMouse: -1
                 property real previousWidth: 0
                 property bool insideDock: false
+                property int suppressedZoomIndex: -1
+                property int launchBounceIndex: -1
+                property real launchBounceOffset: 0
+                property bool launchBounceClaimed: false
+                readonly property bool launchBounceRunning: launchBounceAnimation.running
+
+                function startLaunchBounce(index) {
+                    if (index < 0 || (launchBounceAnimation.running && launchBounceIndex === index)) {
+                        return;
+                    }
+
+                    launchBounceAnimation.stop();
+                    launchBounceOffset = 0;
+                    launchBounceIndex = index;
+                    launchBounceClaimed = false;
+                    suppressedZoomIndex = index;
+                    launchBounceAnimation.start();
+                }
+
+                function claimLaunchBounce(index) {
+                    if (index < 0) {
+                        return;
+                    }
+                    if (launchBounceIndex !== index) {
+                        startLaunchBounce(index);
+                    }
+                    launchBounceClaimed = true;
+                    if (!launchBounceAnimation.running) {
+                        launchBounceIndex = -1;
+                        launchBounceClaimed = false;
+                    }
+                }
+
+                SequentialAnimation {
+                    id: launchBounceAnimation
+                    loops: 3
+                    alwaysRunToEnd: true
+                    onFinished: {
+                        taskList.launchBounceOffset = 0;
+                        if (taskList.launchBounceClaimed) {
+                            taskList.launchBounceIndex = -1;
+                            taskList.launchBounceClaimed = false;
+                        }
+                    }
+
+                    NumberAnimation {
+                        target: taskList
+                        property: "launchBounceOffset"
+                        from: 0
+                        to: taskList._baseSize * 0.35
+                        duration: 180
+                        easing.type: Easing.OutQuad
+                    }
+
+                    NumberAnimation {
+                        target: taskList
+                        property: "launchBounceOffset"
+                        to: 0
+                        duration: 220
+                        easing.type: Easing.InQuad
+                    }
+                }
                 onWidthChanged: {
                     if (!tasks.vertical && insideDock && previousWidth > 0) {
                         smoothMouse += (width - previousWidth) / 2;
@@ -1179,8 +1307,11 @@ PlasmoidItem {
                 onInsideDockChanged: {
                     if (insideDock) {
                         edgeHideTimer.stop();
-                    } else if (tasks.edgeReveal) {
-                        edgeHideTimer.restart();
+                    } else {
+                        suppressedZoomIndex = -1;
+                        if (tasks.edgeReveal) {
+                            edgeHideTimer.restart();
+                        }
                     }
                 }
                 property alias animating: taskList.animating
@@ -1193,18 +1324,35 @@ PlasmoidItem {
                 readonly property real _zoom: (Plasmoid.configuration.magnification || 0) / 100
                 readonly property real maxZoom: 1.0 + (Plasmoid.configuration.magnification || 0) / 100
 
-                readonly property real baseContentSize:
-                    taskRepeater.count * _baseSize
+               readonly property real baseContentSize:
+                    tasks.visibleTaskCount * _baseSize
                     + tasks.previewCount * tasks.previewLongSize
                     + Math.max(0, tasks.zoomItemCount - 1) * spacing
 
                 readonly property real zoomExtraSize: _zoom * _radius
                     * (tasks.previewCount > 0 ? tasks.previewLongSize / _baseSize : 1)
 
-                property real contentSize: Math.ceil(baseContentSize + zoomExtraSize + spacing * 4)
+                readonly property real requestedContentSize: Math.ceil(
+                    baseContentSize + zoomExtraSize + spacing * 4)
+                property real contentSize: requestedContentSize
+
+                onRequestedContentSizeChanged: {
+                    if (requestedContentSize >= contentSize) {
+                        contentSizeShrinkTimer.stop();
+                        contentSize = requestedContentSize;
+                    } else {
+                        contentSizeShrinkTimer.restart();
+                    }
+                }
+
+                Timer {
+                    id: contentSizeShrinkTimer
+                    interval: 20
+                    onTriggered: taskList.contentSize = taskList.requestedContentSize
+                }
 
                function baseLongSizeAt(index) {
-                   return index < taskRepeater.count ? _baseSize : tasks.previewLongSize;
+                   return index < tasks.visibleTaskCount ? _baseSize : tasks.previewLongSize;
                }
 
                function baseItemCenter(index) {
@@ -1213,6 +1361,32 @@ PlasmoidItem {
                        position += baseLongSizeAt(i) + spacing;
                    }
                    return position + baseLongSizeAt(index) / 2;
+               }
+
+               function pointerInsideBaseIcons(position) {
+                   const longPosition = tasks.vertical ? position.y : position.x;
+                   const crossPosition = tasks.vertical ? position.x : position.y;
+                   const longSize = tasks.vertical ? height : width;
+                   const crossSize = tasks.vertical ? width : height;
+                   const longStart = (longSize - baseContentSize) / 2;
+                   const bodyStart = (tasks.vertical ? tasks.isLeftPanel : tasks.isTopPanel)
+                       ? 0 : crossSize - tasks.dockBodyCrossSize;
+                   const crossStart = bodyStart + (tasks.dockBodyCrossSize - tasks.iconSize) / 2;
+
+                   return tasks.zoomItemCount > 0
+                       && longPosition >= longStart
+                       && longPosition <= longStart + baseContentSize
+                       && crossPosition >= crossStart
+                       && crossPosition <= crossStart + tasks.iconSize;
+               }
+
+               function trackPointer(position) {
+                   if (!insideDock && !pointerInsideBaseIcons(position)) {
+                       return;
+                   }
+
+                   smoothMouse = tasks.vertical ? position.y : position.x;
+                   insideDock = true;
                }
 
                readonly property real iconsTotalSize: {
@@ -1293,20 +1467,11 @@ PlasmoidItem {
                 HoverHandler {
                     id: dockHoverHandler
 
-                    onPointChanged: {
-                        taskList.smoothMouse = tasks.vertical
-                            ? point.position.y
-                            : point.position.x
-
-                        taskList.insideDock = true
-                    }
+                    onPointChanged: taskList.trackPointer(point.position)
 
                     onHoveredChanged: {
                         if (hovered) {
-                            taskList.smoothMouse = tasks.vertical
-                                ? point.position.y
-                                : point.position.x
-                            taskList.insideDock = true;
+                            taskList.trackPointer(point.position);
                         } else {
                             exitTimer.restart();
                         }
@@ -1332,6 +1497,7 @@ PlasmoidItem {
                         id: taskItem
                         tasksRoot: tasks
                         dockRef: taskList
+                        visible: tasks.taskVisibleOnCurrentDesktop(model)
 
                         x: {
                             if (tasks.vertical && tasks.isLeftPanel)
@@ -1376,7 +1542,7 @@ PlasmoidItem {
                         taskIndex: index
                         taskModel: model
                         sourceModel: minimizedTasksModel
-                        zoomIndex: taskRepeater.count + index
+                        zoomIndex: tasks.visibleTaskCount + index
                         tasksRoot: tasks
                         dockRef: taskList
                     }
@@ -1393,7 +1559,7 @@ PlasmoidItem {
                         taskIndex: modelData.row
                         taskModel: modelData
                         sourceModel: allPreviewTasksModel
-                        zoomIndex: taskRepeater.count + minimizedPreviewRepeater.count + index
+                        zoomIndex: tasks.visibleTaskCount + minimizedPreviewRepeater.count + index
                         tasksRoot: tasks
                         dockRef: taskList
                         desktopId: modelData.desktopId

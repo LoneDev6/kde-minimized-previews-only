@@ -1,14 +1,18 @@
 {
   "KPackageStructure": "Plasma/Applet",
   "KPlugin": {
-    "Authors": [{"Name": "LoneDev6"}],
+    "Authors": [
+      {"Name": "LoneDev6"},
+      {"Name": "Victor Calles", "Email": "victor.calles@gmail.com"}
+    ],
     "Category": "Windows and Tasks",
-    "Description": "Shows minimized windows and fullscreen virtual desktops as stable live previews.",
+    "Description": "A macOS-style Plasma dock with live window and virtual-desktop previews.",
     "Icon": "window-minimize",
-    "Id": "beer.devs.minimidezpreviews",
+    "Id": "beer.devs.peardock",
     "License": "GPL-2.0-or-later",
-    "Name": "Minimized Window Previews",
-    "Version": "1.3.0"
+    "Name": "PearDock",
+    "Version": "2.0.2"
   },
-  "X-Plasma-API-Minimum-Version": "6.0"
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-Provides": ["org.kde.plasma.multitasking"]
 }

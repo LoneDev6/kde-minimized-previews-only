@@ -11,10 +11,16 @@ import org.kde.taskmanager as TaskManager
 PipeWire.PipeWireSourceItem {
     id: pipeWireSourceItem
 
-    readonly property alias hasThumbnail: pipeWireSourceItem.ready
+    property bool hasThumbnail: false
 
     anchors.fill: parent
     nodeId: waylandItem.nodeId
+
+    onReadyChanged: {
+        if (ready) {
+            hasThumbnail = true;
+        }
+    }
 
     TaskManager.ScreencastingRequest {
         id: waylandItem

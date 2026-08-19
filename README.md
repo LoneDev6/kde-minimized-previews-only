@@ -1,8 +1,8 @@
 # Minimized Window Previews
 
-A compact MacOS-like Plasma 6.7 widget that shows minimized windows as live previews. It
+A compact MacOS-like Plasma 6.7 widget that shows minimized windows as stable live previews. It
 also shows one preview for each non-current virtual desktop containing exactly
-one non-minimized task window.
+one fullscreen task window.
 
 Keep KDE's native Icons-only Task Manager in the panel, then add this widget directly after it.
 

@@ -118,7 +118,8 @@ PlasmoidItem {
             const row = rows[0];
             const modelIndex = allTasksModel.makeModelIndex(row);
             const winIds = allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.WinIdList) || [];
-            if (allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsMinimized)
+            if (!allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsFullScreen)
+                    || allTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsMinimized)
                     || winIds.length !== 1) {
                 continue;
             }
@@ -158,8 +159,11 @@ PlasmoidItem {
 
         function onCountChanged() { root.scheduleDesktopPreviewRebuild(); }
         function onDataChanged() { root.scheduleDesktopPreviewRebuild(); }
+        function onLayoutChanged() { root.scheduleDesktopPreviewRebuild(); }
         function onModelReset() { root.scheduleDesktopPreviewRebuild(); }
+        function onRowsInserted() { root.scheduleDesktopPreviewRebuild(); }
         function onRowsMoved() { root.scheduleDesktopPreviewRebuild(); }
+        function onRowsRemoved() { root.scheduleDesktopPreviewRebuild(); }
     }
 
     Connections {

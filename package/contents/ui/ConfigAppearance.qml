@@ -18,6 +18,44 @@ import QtQuick.Layouts
 KCMUtils.SimpleKCM {
     id: root
 
+    readonly property list<string> previewKeys: [
+        "skinName",
+        "iconSize",
+        "magnification",
+        "amplitud",
+        "showReflection"
+    ]
+    property var appliedPreview: ({})
+    property bool previewReady: false
+    property bool unsavedChanges: false
+
+    function capturePreview(): void {
+        const snapshot = {};
+        previewKeys.forEach(key => snapshot[key] = root["cfg_" + key]);
+        appliedPreview = snapshot;
+        unsavedChanges = false;
+    }
+
+    function updatePreview(key: string): void {
+        if (!previewReady) {
+            return;
+        }
+        Plasmoid.configuration[key] = root["cfg_" + key];
+        unsavedChanges = previewKeys.some(previewKey =>
+            String(root["cfg_" + previewKey]) !== String(appliedPreview[previewKey]));
+    }
+
+    function saveConfig(): void {
+        capturePreview();
+    }
+
+    function restorePreview(): void {
+        if (!previewReady) {
+            return;
+        }
+        previewKeys.forEach(key => Plasmoid.configuration[key] = appliedPreview[key]);
+    }
+
     // Probes whether PulseAudio.qml (which imports org.kde.plasma.private.volume)
     // can load; controls whether the audio-stream config options are enabled.
     Component {
@@ -57,7 +95,13 @@ KCMUtils.SimpleKCM {
         } else if (Plasmoid.configuration.forceStripes && maxStripes.value > 1) {
             forceStripes.checked = true;
         }
+
+        capturePreview();
+        previewKeys.forEach(key =>
+            root["cfg_" + key + "Changed"].connect(() => updatePreview(key)));
+        previewReady = true;
     }
+    Component.onDestruction: restorePreview()
     Kirigami.FormLayout {
 
         QQC2.ComboBox {
@@ -69,7 +113,7 @@ KCMUtils.SimpleKCM {
         }
         // --- Selector de Tamaño de Iconos ---
         RowLayout {
-            Kirigami.FormData.label: "Icon Size:"
+            Kirigami.FormData.label: "Size:"
             spacing: Kirigami.Units.smallSpacing
 
             QQC2.Slider {

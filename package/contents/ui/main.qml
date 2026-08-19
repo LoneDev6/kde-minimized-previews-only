@@ -57,41 +57,26 @@ PlasmoidItem {
     property alias minimizedPreviewRepeater: minimizedPreviewRepeater
     property alias desktopPreviewRepeater: desktopPreviewRepeater
     property var desktopPreviewTasks: []
-    readonly property int previewCount: minimizedPreviewRepeater.count + desktopPreviewRepeater.count
-    readonly property int visibleTaskCount: {
-        let count = 0;
-        for (let index = 0; index < taskRepeater.count; ++index) {
-            if (taskRepeater.itemAt(index)?.visible) {
-                ++count;
-            }
-        }
-        return count;
+    property int delegateLayoutRevision: 0
+    function refreshDelegateLayout() {
+        ++delegateLayoutRevision;
+        taskList.contentSize = taskList.requestedContentSize;
     }
+    readonly property int previewCount: minimizedPreviewRepeater.count + desktopPreviewRepeater.count
+    readonly property int visibleTaskCount: taskRepeater.count
     readonly property int zoomItemCount: visibleTaskCount + previewCount
     readonly property real previewLongSize: Math.round(tasks.iconSize * 1.55)
     property bool taskModelReady: false
 
     function visibleTaskIndex(modelIndex) {
-        let visibleIndex = 0;
-        for (let index = 0; index < modelIndex; ++index) {
-            if (taskRepeater.itemAt(index)?.visible) {
-                ++visibleIndex;
-            }
-        }
-        return visibleIndex;
+        return modelIndex;
     }
 
     function zoomItemAt(index) {
-        for (let modelIndex = 0; modelIndex < taskRepeater.count; ++modelIndex) {
-            const item = taskRepeater.itemAt(modelIndex);
-            if (!item?.visible) {
-                continue;
-            }
-            if (index === 0) {
-                return item;
-            }
-            --index;
+        if (index < taskRepeater.count) {
+            return taskRepeater.itemAt(index);
         }
+        index -= taskRepeater.count;
         if (index < minimizedPreviewRepeater.count) {
             return minimizedPreviewRepeater.itemAt(index);
         }
@@ -155,17 +140,23 @@ PlasmoidItem {
         || (Plasmoid.containment?.corona?.editMode ?? false)
     readonly property real dockBodyLongSize: Math.max(1,
         taskList.baseContentSize + taskList.spacing * 2)
+    readonly property real dockBodyPadding: Math.ceil(tasks.iconSize * 0.10)
     readonly property real dockBodyCrossSize: Math.max(1,
-        tasks.iconSize + Math.ceil(tasks.iconSize * 0.10) * 2)
+        tasks.iconSize + dockBodyPadding * 2)
+    readonly property real dockBodyCrossStart:
+        (tasks.vertical ? tasks.isLeftPanel : tasks.isTopPanel)
+            ? 0 : tasks.dockCrossSize - tasks.dockBodyCrossSize
+    readonly property real dockBodyCrossCenter:
+        tasks.dockBodyCrossStart + tasks.dockBodyCrossSize / 2
     readonly property rect dockBodyGeometry: tasks.vertical
         ? Qt.rect(
-            dockWindow.x + (dockWindow.width - dockBodyCrossSize) / 2,
+            dockWindow.x + dockBodyCrossStart,
             dockWindow.y + (dockWindow.height - dockBodyLongSize) / 2,
             dockBodyCrossSize,
             dockBodyLongSize)
         : Qt.rect(
             dockWindow.x + (dockWindow.width - dockBodyLongSize) / 2,
-            dockWindow.y + (tasks.isTopPanel ? 0 : dockWindow.height - dockBodyCrossSize),
+            dockWindow.y + dockBodyCrossStart,
             dockBodyLongSize,
             dockBodyCrossSize)
 
@@ -715,8 +706,6 @@ PlasmoidItem {
             && !tasks.panelOverlapped
             && (!tasks.dockCovered || tasks.edgeReveal || tasks.metaShowActive)
             && !tasks.panelEditing
-        onVisibleChanged: dockSurface.scheduleSizeSync()
-
         x: {
             const dependency = tasks.x + tasks.width + (tasks.Window.window?.x || 0);
             const globalPosition = tasks.mapToGlobal(0, 0);
@@ -748,29 +737,14 @@ PlasmoidItem {
 
             implicitWidth: tasks.vertical ? tasks.dockCrossSize : taskList.contentSize
             implicitHeight: tasks.vertical ? taskList.contentSize : tasks.dockCrossSize
+            width: implicitWidth
+            height: implicitHeight
             Layout.minimumWidth: implicitWidth
             Layout.preferredWidth: implicitWidth
             Layout.maximumWidth: implicitWidth
             Layout.minimumHeight: implicitHeight
             Layout.preferredHeight: implicitHeight
             Layout.maximumHeight: implicitHeight
-
-            function scheduleSizeSync() {
-                dockSizeSyncTimer.restart();
-            }
-
-            onImplicitWidthChanged: scheduleSizeSync()
-            onImplicitHeightChanged: scheduleSizeSync()
-            Component.onCompleted: scheduleSizeSync()
-
-            Timer {
-                id: dockSizeSyncTimer
-                interval: 20
-                onTriggered: {
-                    dockSurface.width = dockSurface.implicitWidth;
-                    dockSurface.height = dockSurface.implicitHeight;
-                }
-            }
 
             MouseArea {
                 anchors.fill: parent
@@ -1007,22 +981,14 @@ PlasmoidItem {
                     x: {
                         if (!vertical)
                             return (parent.width - width) / 2;
-
-                        if (vertical && Plasmoid.location === PlasmaCore.Types.RightEdge)
-                            return taskList.width - width;
-
-                        return 0;
+                        return tasks.dockBodyCrossStart;
                     }
 
                     y: {
                         if (vertical)
                             return (parent.height - height) / 2;
 
-                        // Panel arriba
-                        if (tasks.isTopPanel)
-                            return 0;
-
-                       return taskList.height - height;
+                        return tasks.dockBodyCrossStart;
                     }
 
                 }
@@ -1364,9 +1330,7 @@ PlasmoidItem {
                    const longSize = tasks.vertical ? height : width;
                    const crossSize = tasks.vertical ? width : height;
                    const longStart = (longSize - baseContentSize) / 2;
-                   const bodyStart = (tasks.vertical ? tasks.isLeftPanel : tasks.isTopPanel)
-                       ? 0 : crossSize - tasks.dockBodyCrossSize;
-                   const crossStart = bodyStart + (tasks.dockBodyCrossSize - tasks.iconSize) / 2;
+                   const crossStart = tasks.dockBodyCrossCenter - tasks.iconSize / 2;
 
                    return tasks.zoomItemCount > 0
                        && longPosition >= longStart
@@ -1381,8 +1345,7 @@ PlasmoidItem {
                    const longSize = tasks.vertical ? height : width;
                    const crossSize = tasks.vertical ? width : height;
                    const longStart = (longSize - tasks.dockBodyLongSize) / 2;
-                   const crossStart = (tasks.vertical ? tasks.isLeftPanel : tasks.isTopPanel)
-                       ? 0 : crossSize - tasks.dockBodyCrossSize;
+                   const crossStart = tasks.dockBodyCrossStart;
 
                    return longPosition >= longStart
                        && longPosition <= longStart + tasks.dockBodyLongSize
@@ -1404,20 +1367,15 @@ PlasmoidItem {
                }
 
                readonly property real iconsTotalSize: {
-                   let total = 0;
+                   let total = tasks.delegateLayoutRevision * 0;
 
                    for (let i = 0; i < tasks.zoomItemCount; ++i) {
                        let item = tasks.zoomItemAt(i);
-
-                       if (item) {
-
-                           total += tasks.vertical
-                           ? item.height
-                           : item.width;
-
-                           if (i > 0)
-                               total += spacing;
-                       }
+                       total += item
+                           ? (tasks.vertical ? item.height : item.width)
+                           : baseLongSizeAt(i);
+                       if (i > 0)
+                           total += spacing;
                    }
 
                    return total;
@@ -1447,11 +1405,7 @@ PlasmoidItem {
 
                 width: {
                     if (tasks.vertical) {
-                        return Math.ceil(
-                            tasks.iconSize *
-                            taskList.maxZoom +
-                            spacing * 4
-                        );
+                        return tasks.dockCrossSize;
                     }
 
                     return contentSize;
@@ -1495,6 +1449,8 @@ PlasmoidItem {
                 Repeater {
                     id: taskRepeater
                     model: tasksModel
+                    onItemAdded: Qt.callLater(tasks.refreshDelegateLayout)
+                    onItemRemoved: Qt.callLater(tasks.refreshDelegateLayout)
 
                     delegate: Task {
                         id: taskItem
@@ -1535,6 +1491,8 @@ PlasmoidItem {
                 Repeater {
                     id: minimizedPreviewRepeater
                     model: minimizedTasksModel
+                    onItemAdded: Qt.callLater(tasks.refreshDelegateLayout)
+                    onItemRemoved: Qt.callLater(tasks.refreshDelegateLayout)
 
                     delegate: PreviewTask {
                         required property int index
@@ -1552,6 +1510,8 @@ PlasmoidItem {
                 Repeater {
                     id: desktopPreviewRepeater
                     model: tasks.desktopPreviewTasks
+                    onItemAdded: Qt.callLater(tasks.refreshDelegateLayout)
+                    onItemRemoved: Qt.callLater(tasks.refreshDelegateLayout)
 
                     delegate: PreviewTask {
                         required property int index

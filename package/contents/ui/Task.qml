@@ -66,6 +66,8 @@ PlasmaCore.ToolTipArea {
     property QtObject contextMenu: null
     readonly property bool smartLauncherEnabled: !inPopup
     property QtObject smartLauncherItem: null
+    readonly property bool smartLauncherCountVisible:
+        (smartLauncherItem?.countVisible ?? false) && (smartLauncherItem?.count ?? 0) > 0
 
     property Item audioStreamIcon: null
     property var audioStreams: []
@@ -156,7 +158,7 @@ PlasmaCore.ToolTipArea {
         }
 
         let smartLauncherDescription = "";
-        if (iconBox.active) {
+        if (task.smartLauncherCountVisible) {
             smartLauncherDescription += i18ncp("@info:tooltip", "There is %1 new message.", "There are %1 new messages.", task.smartLauncherItem.count);
         }
 
@@ -372,7 +374,7 @@ PlasmaCore.ToolTipArea {
         mainItem.isOnAllVirtualDesktops = Qt.binding(() => model.IsOnAllVirtualDesktops);
         mainItem.activities = Qt.binding(() => model.Activities);
 
-        mainItem.smartLauncherCountVisible = Qt.binding(() => smartLauncherItem?.countVisible ?? false);
+        mainItem.smartLauncherCountVisible = Qt.binding(() => task.smartLauncherCountVisible);
         mainItem.smartLauncherCount = Qt.binding(() => mainItem.smartLauncherCountVisible ? (smartLauncherItem?.count ?? 0) : 0);
 
         mainItem.blockingUpdates = false;
@@ -574,7 +576,7 @@ PlasmaCore.ToolTipArea {
         source: "TaskProgressOverlay.qml"
     }
 
-        Loader {
+        Item {
             id: iconBox
 
             HoverHandler {
@@ -593,21 +595,12 @@ PlasmaCore.ToolTipArea {
             // Mantenemos el contenedor con un tamaño fijo
             width: tasksRoot.iconSize
             height: tasksRoot.iconSize
-
-            anchors.verticalCenter: tasksRoot.vertical ? parent.verticalCenter : undefined
-            anchors.left: tasksRoot.vertical && tasksRoot.isLeftPanel ? parent.left : undefined
-            anchors.right: tasksRoot.vertical && !tasksRoot.isLeftPanel ? parent.right : undefined
-            anchors.horizontalCenter: !tasksRoot.vertical ? parent.horizontalCenter : undefined
-            anchors.top: !tasksRoot.vertical && tasksRoot.isTopPanel ? parent.top : undefined
-            anchors.bottom: !tasksRoot.vertical && !tasksRoot.isTopPanel ? parent.bottom : undefined
-            anchors.leftMargin: tasksRoot.vertical && tasksRoot.isLeftPanel
-                ? (tasksRoot.dockBodyCrossSize - width) / 2 : 0
-            anchors.rightMargin: tasksRoot.vertical && !tasksRoot.isLeftPanel
-                ? (tasksRoot.dockBodyCrossSize - width) / 2 : 0
-            anchors.topMargin: !tasksRoot.vertical && tasksRoot.isTopPanel
-                ? (tasksRoot.dockBodyCrossSize - height) / 2 : 0
-            anchors.bottomMargin: !tasksRoot.vertical && !tasksRoot.isTopPanel
-                ? (tasksRoot.dockBodyCrossSize - height) / 2 : 0
+            x: tasksRoot.vertical
+                ? tasksRoot.dockBodyCrossCenter - width / 2
+                : (parent.width - width) / 2
+            y: tasksRoot.vertical
+                ? (parent.height - height) / 2
+                : tasksRoot.dockBodyCrossCenter - height / 2
 
             property int baseRenderSize: tasksRoot.iconSize * 2
 
@@ -699,10 +692,6 @@ PlasmaCore.ToolTipArea {
                 x: iconBox.bounceX
                 y: iconBox.bounceY
             }
-
-            asynchronous: true
-            active: task.smartLauncherItem && task.smartLauncherItem.countVisible
-            source: "TaskBadgeOverlay.qml"
 
             function adjustMargin(isVertical: bool, size: real, margin: real): real {
                 if (!size) {
@@ -939,16 +928,7 @@ PlasmaCore.ToolTipArea {
             dockRef?.claimLaunchBounce(zoomIndex);
         }
         if (!inPopup && model.IsWindow) {
-            const component = Qt.createComponent("GroupExpanderOverlay.qml");
-            component.createObject(task);
-            component.destroy();
             updateAudioStreams({delay: false});
-            console.log(
-                "iconBox y=", iconBox.y,
-                "iconBox x=", iconBox.x,
-                "top=", iconBox.anchors.top,
-                "bottom=", iconBox.anchors.bottom
-            );
         }
 
         if (!inPopup && model.IsWindow) {

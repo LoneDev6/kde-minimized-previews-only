@@ -98,20 +98,22 @@ PlasmaCore.ToolTipArea {
         height: tasksRoot.vertical
             ? root.baseLongSize * root.zoomFactor
             : root.tasksRoot.iconSize * root.zoomFactor
-        anchors.horizontalCenter: tasksRoot.vertical ? undefined : parent.horizontalCenter
-        anchors.verticalCenter: tasksRoot.vertical ? parent.verticalCenter : undefined
-        anchors.left: tasksRoot.vertical && tasksRoot.isLeftPanel ? parent.left : undefined
-        anchors.right: tasksRoot.vertical && !tasksRoot.isLeftPanel ? parent.right : undefined
-        anchors.top: !tasksRoot.vertical && tasksRoot.isTopPanel ? parent.top : undefined
-        anchors.bottom: !tasksRoot.vertical && !tasksRoot.isTopPanel ? parent.bottom : undefined
-        anchors.leftMargin: tasksRoot.vertical && tasksRoot.isLeftPanel
-            ? (tasksRoot.dockBodyCrossSize - tasksRoot.iconSize) / 2 : 0
-        anchors.rightMargin: tasksRoot.vertical && !tasksRoot.isLeftPanel
-            ? (tasksRoot.dockBodyCrossSize - tasksRoot.iconSize) / 2 : 0
-        anchors.topMargin: !tasksRoot.vertical && tasksRoot.isTopPanel
-            ? (tasksRoot.dockBodyCrossSize - tasksRoot.iconSize) / 2 : 0
-        anchors.bottomMargin: !tasksRoot.vertical && !tasksRoot.isTopPanel
-            ? (tasksRoot.dockBodyCrossSize - tasksRoot.iconSize) / 2 : 0
+        x: {
+            if (!tasksRoot.vertical) {
+                return (parent.width - width) / 2;
+            }
+            return tasksRoot.isLeftPanel
+                ? tasksRoot.dockBodyCrossCenter - tasksRoot.iconSize / 2
+                : tasksRoot.dockBodyCrossCenter + tasksRoot.iconSize / 2 - width;
+        }
+        y: {
+            if (tasksRoot.vertical) {
+                return (parent.height - height) / 2;
+            }
+            return tasksRoot.isTopPanel
+                ? tasksRoot.dockBodyCrossCenter - tasksRoot.iconSize / 2
+                : tasksRoot.dockBodyCrossCenter + tasksRoot.iconSize / 2 - height;
+        }
 
         Rectangle {
             anchors.fill: parent

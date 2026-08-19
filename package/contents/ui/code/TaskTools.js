@@ -121,10 +121,7 @@ function activateTask(index, model, modifiers, task, plasmoid, tasks, windowView
         tasks.tasksModel.requestNewInstance(index);
         return;
     }
-    // Publish delegate geometry again if there are more than one task manager instance
-    if (taskManagerInstanceCount >= 2) {
-        tasks.tasksModel.requestPublishDelegateGeometry(task.modelIndex(), tasks.backend.globalRect(task), task);
-    }
+    tasks.publishDelegateGeometry(tasks.tasksModel, task.modelIndex(), task.iconGeometryItem);
 
     if (model.IsGroupParent) {
         // Option 1 (default): Cycle through this group's tasks

@@ -56,6 +56,7 @@ PlasmaCore.ToolTipArea {
     readonly property string appName: model.AppName
     readonly property string appId: model.AppId.replace(/\.desktop/, '')
     readonly property bool isIcon: tasksRoot.iconsOnly || model.IsLauncher
+    readonly property Item iconGeometryItem: iconBox
     property bool toolTipOpen: false
     property bool inPopup: false
     property bool isWindow: model.IsWindow
@@ -224,7 +225,7 @@ PlasmaCore.ToolTipArea {
 
     onChildCountChanged: {
         if (TaskTools.taskManagerInstanceCount < 2 && childCount > previousChildCount) {
-            tasksModel.requestPublishDelegateGeometry(modelIndex(), backend.globalRect(task), task);
+            tasksRoot.publishDelegateGeometry(tasksModel, modelIndex(), iconGeometryItem);
         }
 
         previousChildCount = childCount;
@@ -513,7 +514,7 @@ PlasmaCore.ToolTipArea {
 
         imagePath: tasksRoot.iconsOnly
             ? ""
-            : ((Plasmoid.configuration.skinName === "Default Plasma") ? "widgets/tasks" : tasks.skinParams.imagetask)
+            : "widgets/tasks"
         property bool isHovered: task.highlighted && Plasmoid.configuration.taskHoverEffect
         property string basePrefix: "normal"
         prefix: isHovered ? TaskTools.taskPrefixHovered(basePrefix, Plasmoid.location) : TaskTools.taskPrefix(basePrefix, Plasmoid.location)
@@ -846,7 +847,7 @@ PlasmaCore.ToolTipArea {
             width: 4
             height: 4
             radius: 2
-            color: "white"
+            color: Plasmoid.configuration.skinName === "Light" ? "#30343b" : "white"
             opacity: 0.9
             visible: !task.model.IsLauncher && !task.model.IsStartup
             z: 6
@@ -950,7 +951,7 @@ PlasmaCore.ToolTipArea {
             );
         }
 
-        if (!inPopup && !model.IsWindow) {
+        if (!inPopup && model.IsWindow) {
             taskInitComponent.createObject(task);
         }
         completed = true;

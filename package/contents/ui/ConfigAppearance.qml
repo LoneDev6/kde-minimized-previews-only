@@ -8,7 +8,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls as QQC2
-import Qt.labs.folderlistmodel // Importante para listar las carpetas de skins
 
 import org.kde.kcmutils as KCMUtils
 import org.kde.kirigami as Kirigami
@@ -43,7 +42,7 @@ KCMUtils.SimpleKCM {
     property alias cfg_iconSize: iconSizeSlider.value
     property alias cfg_magnification: magnificationSlider.value
     property alias cfg_amplitud: amplitudSlider.value
-    property string cfg_skinName: Plasmoid.configuration.skinName
+    property string cfg_skinName: Plasmoid.configuration.skinName === "Light" ? "Light" : "Dark"
     property alias cfg_showReflection: showReflection.checked
 
     Component.onCompleted: {
@@ -61,58 +60,12 @@ KCMUtils.SimpleKCM {
     }
     Kirigami.FormLayout {
 
-        // ComboBox para mostrar los skins
         QQC2.ComboBox {
             id: skinChooser
             Kirigami.FormData.label: "Skin:"
-            textRole: "fileName"
-
-            // Usamos una propiedad local para rastrear si ya sincronizamos el valor inicial
-            property bool initialSyncDone: false
-
-            model: FolderListModel {
-                id: folderModel
-                folder: Qt.resolvedUrl("../skins")
-                showDirs: true
-                showFiles: false
-                showDotAndDotDot: false
-                // Forzamos a que el modelo se mantenga actualizado
-                sortField: FolderListModel.Name
-            }
-
-            onActivated: {
-                // Actualizamos la configuración al elegir manualmente
-                cfg_skinName = textAt(currentIndex)
-            }
-
-            function syncValue() {
-                // Si el modelo ya tiene carpetas y aún no hemos sincronizado...
-                if (count > 0 && !initialSyncDone) {
-                    for (let i = 0; i < count; i++) {
-                        if (textAt(i) === cfg_skinName) {
-                            currentIndex = i;
-                            initialSyncDone = true; // Marcamos como hecho
-                            return;
-                        }
-                    }
-                }
-            }
-
-            // Monitoreamos cuando el modelo termine de cargar los archivos
-            Connections {
-                target: folderModel
-                // 'status' cambia a FolderListModel.Ready cuando termina de leer el disco
-                function onStatusChanged() {
-                    if (folderModel.status === FolderListModel.Ready) {
-                        skinChooser.syncValue();
-                    }
-                }
-                // Por si acaso los archivos ya estaban listos
-                function onCountChanged() { skinChooser.syncValue() }
-            }
-
-            // Intentar sincronizar al completar por si el disco es ultra rápido
-            Component.onCompleted: syncValue()
+            model: ["Dark", "Light"]
+            currentIndex: cfg_skinName === "Light" ? 1 : 0
+            onActivated: index => cfg_skinName = model[index]
         }
         // --- Selector de Tamaño de Iconos ---
         RowLayout {

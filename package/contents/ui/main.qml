@@ -226,7 +226,8 @@ PlasmoidItem {
   })
 
   function loadSkinConfig() {
-      let skinName = Plasmoid.configuration.skinName || "Default Plasma";
+      const skinName = Plasmoid.configuration.skinName === "Light" ? "Light" : "Dark";
+      const configSkinName = "Default Plasma";
 
       // LIMPIAR BLUR ANTES DE CAMBIAR
       if (tasks.backend && dockWindow) {
@@ -236,7 +237,7 @@ PlasmoidItem {
       }
 
       // Construimos la ruta al nuevo archivo Config.qml
-      let configUrl = Qt.resolvedUrl("../skins/" + skinName + "/Config.qml");
+      let configUrl = Qt.resolvedUrl("../skins/" + configSkinName + "/Config.qml");
 
       console.log("Cargando configuración de skin desde: " + configUrl);
 
@@ -252,7 +253,7 @@ PlasmoidItem {
           let config = component.createObject(tasks); // 'tasks' es el id de tu PlasmoidItem
 
           if (config) {
-              let skinFolderUrl = Qt.resolvedUrl("../skins/" + skinName + "/").toString();
+              let skinFolderUrl = Qt.resolvedUrl("../skins/" + configSkinName + "/").toString();
 
               // Actualizamos skinParams de forma reactiva
               tasks.skinParams = {
@@ -364,17 +365,31 @@ PlasmoidItem {
         return DBus.SessionBus.asyncCall({service: "org.kde.KWin.Effect.WindowView1", path: "/org/kde/KWin/Effect/WindowView1", iface: "org.kde.KWin.Effect.WindowView1", member: "activate", arguments: [winIds.map(s => String(s))], signature: "(as)"});
     }
 
-    function publishIconGeometries(taskItems: /*list<Item>*/var): void {
+    function publishDelegateGeometry(sourceModel: var, modelIndex: var, visualItem: Item): void {
+        if (!sourceModel || !visualItem) {
+            return;
+        }
+        sourceModel.requestPublishDelegateGeometry(modelIndex,
+            backend.globalRect(visualItem), visualItem);
+    }
+
+    function publishIconGeometries(): void {
         if (TaskTools.taskManagerInstanceCount >= 2) {
             return;
         }
-        for (let i = 0; i < taskItems.length - 1; ++i) {
-            const task = taskItems[i];
 
+        for (let i = 0; i < taskRepeater.count; ++i) {
+            const task = taskRepeater.itemAt(i);
             if (task.visible && task.model && !task.model.IsLauncher && !task.model.IsStartup) {
-                tasksModel.requestPublishDelegateGeometry(tasksModel.makeModelIndex(task.index),
-                    backend.globalRect(task), task);
+                publishDelegateGeometry(tasksModel, task.modelIndex(), task.iconGeometryItem);
             }
+        }
+
+        for (let i = 0; i < minimizedPreviewRepeater.count; ++i) {
+            minimizedPreviewRepeater.itemAt(i)?.publishGeometry();
+        }
+        for (let i = 0; i < desktopPreviewRepeater.count; ++i) {
+            desktopPreviewRepeater.itemAt(i)?.publishGeometry();
         }
     }
 
@@ -645,7 +660,8 @@ PlasmoidItem {
             onTriggered: {
                 const task = parent as Task;
                 if (task) {
-                    tasks.tasksModel.requestPublishDelegateGeometry(task.modelIndex(), tasks.backend.globalRect(task), task);
+                    tasks.publishDelegateGeometry(tasks.tasksModel,
+                        task.modelIndex(), task.iconGeometryItem);
                 }
                 destroy();
             }
@@ -784,7 +800,7 @@ PlasmoidItem {
             repeat: false
 
             onTriggered: {
-                tasks.publishIconGeometries(taskList.children, tasks);
+                tasks.publishIconGeometries();
             }
         }
 
@@ -891,7 +907,7 @@ PlasmoidItem {
             id: backgroundLoader
 
             anchors.fill: parent
-            sourceComponent: (Plasmoid.configuration.skinName === "Default Plasma") ? defaultSkin : customSkin
+            sourceComponent: defaultSkin
         }
 
         // --- Componente 1: DEFAULT (SVG) ---
@@ -968,20 +984,17 @@ PlasmoidItem {
 
                 Rectangle {
                     id: backgroundItem
+                    readonly property bool light: Plasmoid.configuration.skinName === "Light"
 
                     z: -1
                     radius: Math.min(width, height) * 0.28
-                    color: Qt.rgba(
-                        Kirigami.Theme.backgroundColor.r,
-                        Kirigami.Theme.backgroundColor.g,
-                        Kirigami.Theme.backgroundColor.b,
-                        0.72)
+                    color: light
+                        ? Qt.rgba(0.94, 0.95, 0.98, 0.78)
+                        : Qt.rgba(0.10, 0.11, 0.14, 0.72)
                     border.width: 1
-                    border.color: Qt.rgba(
-                        Kirigami.Theme.textColor.r,
-                        Kirigami.Theme.textColor.g,
-                        Kirigami.Theme.textColor.b,
-                        0.16)
+                    border.color: light
+                        ? Qt.rgba(0, 0, 0, 0.16)
+                        : Qt.rgba(1, 1, 1, 0.16)
 
                     width: vertical
                     ? panelThickness
@@ -1461,7 +1474,7 @@ PlasmoidItem {
 
                 onAnimatingChanged: {
                     if (!animating) {
-                        tasks.publishIconGeometries(children, tasks);
+                        tasks.publishIconGeometries();
                     }
                 }
 

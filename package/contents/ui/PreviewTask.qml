@@ -17,6 +17,7 @@ PlasmaCore.ToolTipArea {
     property var desktopId
     property string desktopName: ""
     readonly property bool isPreview: true
+    readonly property Item previewGeometryItem: previewFrame
     readonly property real baseLongSize: tasksRoot.previewLongSize
     readonly property real _radius: tasksRoot.iconSize * Plasmoid.configuration.amplitud
     readonly property real _zoom: (Plasmoid.configuration.magnification || 0) / 100
@@ -61,7 +62,14 @@ PlasmaCore.ToolTipArea {
         }
     }
 
-    Component.onCompleted: completed = true
+    function publishGeometry(): void {
+        tasksRoot.publishDelegateGeometry(sourceModel, modelIndex, previewGeometryItem);
+    }
+
+    Component.onCompleted: {
+        completed = true;
+        Qt.callLater(publishGeometry);
+    }
 
     Item {
         id: previewFrame
@@ -164,6 +172,7 @@ PlasmaCore.ToolTipArea {
     TapHandler {
         acceptedButtons: Qt.LeftButton
         onTapped: {
+            root.publishGeometry();
             if (!root.desktopPreview) {
                 root.sourceModel.requestToggleMinimized(root.modelIndex);
             }

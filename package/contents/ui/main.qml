@@ -71,17 +71,6 @@ PlasmoidItem {
     readonly property real previewLongSize: Math.round(tasks.iconSize * 1.55)
     property bool taskModelReady: false
 
-    function taskVisibleOnCurrentDesktop(taskModel) {
-        if (!Plasmoid.configuration.showOnlyCurrentDesktop
-                || taskModel.IsLauncher || taskModel.IsStartup
-                || taskModel.IsOnAllVirtualDesktops) {
-            return true;
-        }
-
-        const currentDesktop = String(virtualDesktopInfo.currentDesktop);
-        return (taskModel.VirtualDesktops || []).some(desktop => String(desktop) === currentDesktop);
-    }
-
     function visibleTaskIndex(modelIndex) {
         let visibleIndex = 0;
         for (let index = 0; index < modelIndex; ++index) {
@@ -119,20 +108,16 @@ PlasmoidItem {
         onTriggered: tasks.taskModelReady = true
     }
 
-    readonly property bool metaKeyHeld: backend.metaKeyHeld
-    readonly property bool metaFeaturesEnabled: Plasmoid.configuration.showOnMetaKey
-                                                || Plasmoid.configuration.showTaskNumbersOnMeta
-
     // --- META KEY DOCK VISIBILITY ---
     property bool metaShowActive: false
 
-    // Reset timer: hides dock and numbers after Meta is no longer detected
+    // Reset timer: hides the dock after Meta is no longer detected
     Timer {
         id: metaResetTimer
         interval: 500
         repeat: false
         onTriggered: {
-            console.log("QML: metaResetTimer fired, hiding dock/numbers");
+            console.log("QML: metaResetTimer fired, hiding dock");
             tasks.metaShowActive = false;
         }
     }
@@ -498,10 +483,9 @@ PlasmoidItem {
     readonly property TaskManager.TasksModel minimizedTasksModel: TaskManager.TasksModel {
         id: minimizedTasksModel
 
-        virtualDesktop: virtualDesktopInfo.currentDesktop
         screenGeometry: Plasmoid.containment.screenGeometry
         activity: activityInfo.currentActivity
-        filterByVirtualDesktop: true
+        filterByVirtualDesktop: false
         filterByScreen: true
         filterByActivity: true
         filterNotMinimized: true
@@ -541,7 +525,6 @@ PlasmoidItem {
     function rebuildDesktopPreviewTasks() {
         const desktopIds = virtualDesktopInfo.desktopIds;
         const desktopNames = virtualDesktopInfo.desktopNames;
-        const currentDesktop = virtualDesktopInfo.currentDesktop;
         const windowsByDesktop = {};
 
         for (let desktopIndex = 0; desktopIndex < desktopIds.length; ++desktopIndex) {
@@ -575,7 +558,7 @@ PlasmoidItem {
         for (let desktopIndex = 0; desktopIndex < desktopIds.length; ++desktopIndex) {
             const desktopId = desktopIds[desktopIndex];
             const rows = windowsByDesktop[String(desktopId)];
-            if (String(desktopId) === String(currentDesktop) || rows.length !== 1) {
+            if (rows.length !== 1) {
                 continue;
             }
 
@@ -630,7 +613,6 @@ PlasmoidItem {
 
     Connections {
         target: virtualDesktopInfo
-        function onCurrentDesktopChanged() { tasks.scheduleDesktopPreviewRebuild(); }
         function onDesktopIdsChanged() { tasks.scheduleDesktopPreviewRebuild(); }
         function onDesktopNamesChanged() { tasks.scheduleDesktopPreviewRebuild(); }
         function onDesktopPositionsChanged() { tasks.scheduleDesktopPreviewRebuild(); }
@@ -1380,7 +1362,26 @@ PlasmoidItem {
                        && crossPosition <= crossStart + tasks.iconSize;
                }
 
+               function pointerInsideDockBody(position) {
+                   const longPosition = tasks.vertical ? position.y : position.x;
+                   const crossPosition = tasks.vertical ? position.x : position.y;
+                   const longSize = tasks.vertical ? height : width;
+                   const crossSize = tasks.vertical ? width : height;
+                   const longStart = (longSize - tasks.dockBodyLongSize) / 2;
+                   const crossStart = (tasks.vertical ? tasks.isLeftPanel : tasks.isTopPanel)
+                       ? 0 : crossSize - tasks.dockBodyCrossSize;
+
+                   return longPosition >= longStart
+                       && longPosition <= longStart + tasks.dockBodyLongSize
+                       && crossPosition >= crossStart
+                       && crossPosition <= crossStart + tasks.dockBodyCrossSize;
+               }
+
                function trackPointer(position) {
+                   if (insideDock && !pointerInsideDockBody(position)) {
+                       insideDock = false;
+                       return;
+                   }
                    if (!insideDock && !pointerInsideBaseIcons(position)) {
                        return;
                    }
@@ -1473,17 +1474,6 @@ PlasmoidItem {
                         if (hovered) {
                             taskList.trackPointer(point.position);
                         } else {
-                            exitTimer.restart();
-                        }
-                    }
-                }
-
-                Timer {
-                    id: exitTimer
-                    interval: 40
-                    repeat: false
-                    onTriggered: {
-                        if (!dockHoverHandler.hovered) {
                             taskList.insideDock = false;
                         }
                     }
@@ -1497,8 +1487,6 @@ PlasmoidItem {
                         id: taskItem
                         tasksRoot: tasks
                         dockRef: taskList
-                        visible: tasks.taskVisibleOnCurrentDesktop(model)
-
                         x: {
                             if (tasks.vertical && tasks.isLeftPanel)
                                 return 0;

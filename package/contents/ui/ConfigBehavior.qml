@@ -32,13 +32,11 @@ KCMUtils.SimpleKCM {
     property alias cfg_wheelEnabled: wheelEnabled.currentIndex
     property alias cfg_wheelSkipMinimized: wheelSkipMinimized.checked
     property alias cfg_showOnlyCurrentScreen: showOnlyCurrentScreen.checked
-    property alias cfg_showOnlyCurrentDesktop: showOnlyCurrentDesktop.checked
     property alias cfg_showOnlyCurrentActivity: showOnlyCurrentActivity.checked
     property alias cfg_showOnlyMinimized: showOnlyMinimized.checked
     property alias cfg_minimizeActiveTaskOnClick: minimizeActive.checked
     property alias cfg_unhideOnAttention: unhideOnAttention.checked
     property alias cfg_showOnMetaKey: showOnMetaKey.checked
-    property alias cfg_showTaskNumbersOnMeta: showTaskNumbersOnMeta.checked
     property alias cfg_reverseMode: reverseMode.checked
 
     headerPaddingEnabled: false
@@ -232,13 +230,8 @@ KCMUtils.SimpleKCM {
         }
 
         QQC2.CheckBox {
-            id: showOnlyCurrentDesktop
-            Kirigami.FormData.label: i18nc("@label for checkbox group, completes sentence like: … from current screen", "Show only tasks:")
-            text: i18nc("@option:check completes sentence: show only tasks", "From the current desktop")
-        }
-
-        QQC2.CheckBox {
             id: showOnlyCurrentActivity
+            Kirigami.FormData.label: i18nc("@label for checkbox group, completes sentence like: … from current screen", "Show only tasks:")
             text: i18nc("@option:check completes sentence: show only tasks", "From the current activity")
         }
 
@@ -273,11 +266,6 @@ KCMUtils.SimpleKCM {
             id: showOnMetaKey
             Kirigami.FormData.label: i18nc("@label for checkbox, completes sentence: … show dock when Meta key is pressed", "Meta key:")
             text: i18nc("@option:check completes sentence: Pressing Meta key", "Shows the dock when it's hidden")
-        }
-
-        QQC2.CheckBox {
-            id: showTaskNumbersOnMeta
-            text: i18nc("@option:check completes sentence: Holding Meta key", "Displays task index numbers on each icon")
         }
 
         Item {

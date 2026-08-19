@@ -10,10 +10,6 @@
       <label>Whether to show only window tasks that are on the same screen as the widget.</label>
       <default>false</default>
     </entry>
-    <entry name="showOnlyCurrentDesktop" type="Bool">
-      <label>Whether to only show tasks that are on the current virtual desktop.</label>
-      <default>true</default>
-    </entry>
     <entry name="showOnlyCurrentActivity" type="Bool">
       <label>Whether to show only tasks that are on the current activity.</label>
       <default>true</default>
@@ -172,10 +168,6 @@
     </entry>
     <entry name="showOnMetaKey" type="Bool">
       <label>Whether pressing the Meta/Win key should temporarily show the dock when it is hidden.</label>
-      <default>true</default>
-    </entry>
-    <entry name="showTaskNumbersOnMeta" type="Bool">
-      <label>Whether holding the Meta/Win key should display task index numbers above each icon.</label>
       <default>true</default>
     </entry>
   </group>

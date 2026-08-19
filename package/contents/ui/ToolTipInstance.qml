@@ -504,7 +504,7 @@ ColumnLayout {
     function generateSubText(): string {
         const subTextEntries = [];
 
-        if (!Plasmoid.configuration.showOnlyCurrentDesktop && virtualDesktopInfo.numberOfDesktops > 1) {
+        if (virtualDesktopInfo.numberOfDesktops > 1) {
             if (!isOnAllVirtualDesktops && virtualDesktops.length > 0) {
                 const virtualDesktopNameList = virtualDesktops.map(virtualDesktop => {
                     const index = virtualDesktopInfo.desktopIds.indexOf(virtualDesktop);

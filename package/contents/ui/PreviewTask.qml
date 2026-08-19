@@ -70,9 +70,16 @@ PlasmaCore.ToolTipArea {
             id: pointer
             cursorShape: Qt.PointingHandCursor
             onHoveredChanged: {
-                if (hovered && root.dockRef.suppressedZoomIndex >= 0
-                        && root.dockRef.suppressedZoomIndex !== root.zoomIndex) {
-                    root.dockRef.suppressedZoomIndex = -1;
+                if (hovered) {
+                    if (root.dockRef.suppressedZoomIndex >= 0
+                            && root.dockRef.suppressedZoomIndex !== root.zoomIndex) {
+                        root.dockRef.suppressedZoomIndex = -1;
+                    }
+                    Qt.callLater(() => {
+                        if (pointer.hovered) {
+                            root.showToolTip();
+                        }
+                    });
                 }
             }
         }

@@ -3,6 +3,7 @@ import org.kde.kirigami as Kirigami
 import org.kde.kwindowsystem
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
+import org.kde.taskmanager as TaskManager
 
 PlasmaCore.ToolTipArea {
     id: root
@@ -18,7 +19,15 @@ PlasmaCore.ToolTipArea {
     property string desktopName: ""
     readonly property bool isPreview: true
     readonly property Item previewGeometryItem: previewFrame
-    readonly property real baseLongSize: tasksRoot.previewLongSize
+    readonly property rect windowGeometry: sourceModel.data(modelIndex,
+        TaskManager.AbstractTasksModel.Geometry) || Qt.rect(0, 0, 0, 0)
+    readonly property real windowAspectRatio: windowGeometry.height > 0
+        ? windowGeometry.width / windowGeometry.height
+        : 0
+    readonly property real baseLongSize: windowAspectRatio > 0
+        ? Math.round((tasksRoot.iconSize - 4)
+            * (tasksRoot.vertical ? 1 / windowAspectRatio : windowAspectRatio) + 4)
+        : tasksRoot.previewLongSize
     readonly property real _radius: tasksRoot.iconSize * Plasmoid.configuration.amplitud
     readonly property real _zoom: (Plasmoid.configuration.magnification || 0) / 100
     readonly property var modelIndex: sourceModel.makeModelIndex(taskIndex)

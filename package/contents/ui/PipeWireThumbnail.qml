@@ -17,6 +17,11 @@ PipeWire.PipeWireSourceItem {
 
     anchors.fill: parent
     nodeId: waylandItem.nodeId
+    layer.enabled: ready && width > 0 && height > 0
+    layer.smooth: true
+    layer.mipmap: true
+    layer.textureSize: Qt.size(Math.max(1, Math.ceil(width * 3)),
+        Math.max(1, Math.ceil(height * 3)))
 
     TaskManager.ScreencastingRequest {
         id: waylandItem

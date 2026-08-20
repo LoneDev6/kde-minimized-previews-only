@@ -1295,20 +1295,36 @@ PlasmoidItem {
                 readonly property real _zoom: (Plasmoid.configuration.magnification || 0) / 100
                 readonly property real maxZoom: 1.0 + (Plasmoid.configuration.magnification || 0) / 100
 
-               readonly property real baseContentSize:
-                    tasks.visibleTaskCount * _baseSize
-                    + tasks.previewCount * tasks.previewLongSize
-                    + Math.max(0, tasks.zoomItemCount - 1) * spacing
+               readonly property real baseItemsSize: {
+                   let total = tasks.delegateLayoutRevision * 0;
+                   for (let i = 0; i < tasks.zoomItemCount; ++i) {
+                       total += baseLongSizeAt(i);
+                   }
+                   return total;
+               }
+
+               readonly property real baseContentSize: baseItemsSize
+                   + Math.max(0, tasks.zoomItemCount - 1) * spacing
+
+               readonly property real largestBaseLongSize: {
+                   let largest = _baseSize;
+                   for (let i = 0; i < tasks.zoomItemCount; ++i) {
+                       largest = Math.max(largest, baseLongSizeAt(i));
+                   }
+                   return largest;
+               }
 
                 readonly property real zoomExtraSize: _zoom * _radius
-                    * (tasks.previewCount > 0 ? tasks.previewLongSize / _baseSize : 1)
+                    * largestBaseLongSize / _baseSize
 
                readonly property real requestedContentSize: Math.ceil(
                     baseContentSize + zoomExtraSize + spacing * 4)
                 readonly property real contentSize: requestedContentSize
 
                function baseLongSizeAt(index) {
-                   return index < tasks.visibleTaskCount ? _baseSize : tasks.previewLongSize;
+                   const item = tasks.zoomItemAt(index);
+                   return item?.baseLongSize
+                       ?? (index < tasks.visibleTaskCount ? _baseSize : tasks.previewLongSize);
                }
 
                function baseItemCenter(index) {
@@ -1348,8 +1364,23 @@ PlasmoidItem {
                        && crossPosition <= crossStart + tasks.dockBodyCrossSize;
                }
 
+               function pointerInsideZoomedIcon(position) {
+                   for (let i = 0; i < taskRepeater.count; ++i) {
+                       const item = taskRepeater.itemAt(i);
+                       if (!item || item.zoomFactor <= 1) {
+                           continue;
+                       }
+                       const iconPosition = item.iconGeometryItem.mapFromItem(taskList, position);
+                       if (item.iconGeometryItem.contains(iconPosition)) {
+                           return true;
+                       }
+                   }
+                   return false;
+               }
+
                function trackPointer(position) {
-                   if (insideDock && !pointerInsideDockBody(position)) {
+                   if (insideDock && !pointerInsideDockBody(position)
+                           && !pointerInsideZoomedIcon(position)) {
                        insideDock = false;
                        return;
                    }

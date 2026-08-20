@@ -27,7 +27,7 @@ Item {
         topMargin: Math.round(indicatorScale) + (Kirigami.Units.smallSpacing * 3)
     }
 
-    readonly property real indicatorScale: 1.2
+    readonly property real indicatorScale: 0.84
 
     activeFocusOnTab: true
 

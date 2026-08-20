@@ -96,11 +96,7 @@ PlasmoidItem {
     property int delegateLayoutRevision: 0
     property int stableTaskCount: 0
     function refreshDelegateLayout() {
-        const taskCountChanged = stableTaskCount !== taskRepeater.count;
         stableTaskCount = taskRepeater.count;
-        if (taskModelReady && taskCountChanged) {
-            taskList.beginLayoutTransition();
-        }
         ++delegateLayoutRevision;
         dockSurface.width = Qt.binding(() => dockSurface.implicitWidth);
         dockSurface.height = Qt.binding(() => dockSurface.implicitHeight);
@@ -770,21 +766,18 @@ PlasmoidItem {
             && !tasks.panelEditing
         onVisibleChanged: if (visible) Qt.callLater(tasks.refreshDelegateLayout)
         x: {
-            const dependency = tasks.x + tasks.width + (tasks.Window.window?.x || 0);
-            const globalPosition = tasks.mapToGlobal(0, 0);
             if (!tasks.vertical) {
-                if (Plasmoid.location === PlasmaCore.Types.Floating) {
-                    const screen = Plasmoid.containment.screenGeometry;
-                    return screen.x + (screen.width - width) / 2;
-                }
-                return globalPosition.x + (tasks.width - width) / 2;
+                const screen = Plasmoid.containment.screenGeometry;
+                return screen.x + (screen.width - width) / 2;
             }
+            const dependency = tasks.x;
+            const globalPosition = tasks.mapToGlobal(0, 0);
             return tasks.vertical && !tasks.isLeftPanel
                 ? globalPosition.x + tasks.width - width + Kirigami.Units.smallSpacing
                 : globalPosition.x;
         }
         y: {
-            const dependency = tasks.y + tasks.height + (tasks.Window.window?.y || 0);
+            const dependency = tasks.y;
             const globalPosition = tasks.mapToGlobal(0, 0);
             if (!tasks.vertical && Plasmoid.location === PlasmaCore.Types.Floating) {
                 const screen = Plasmoid.containment.screenGeometry;
@@ -943,6 +936,7 @@ PlasmoidItem {
             id: defaultSkin
             Item {
                 id: internalCanvas
+                anchors.fill: parent
 
                 readonly property bool vertical: tasks.vertical
 
@@ -1025,37 +1019,21 @@ PlasmoidItem {
 
                     width: vertical
                     ? panelThickness
-                    : baseIconsSize + (currentGrowth * 2) + Kirigami.Units.smallSpacing * 2
+                    : taskList.iconsTotalSize + Kirigami.Units.smallSpacing * 4
 
                     height: vertical
-                    ? baseIconsSize + (currentGrowth * 2)
+                    ? taskList.iconsTotalSize + Kirigami.Units.smallSpacing * 4
                     : panelThickness
-
-                    Behavior on width {
-                        enabled: !vertical && taskList.layoutTransitionActive
-                        NumberAnimation {
-                            duration: tasks.layoutAnimationDuration
-                            easing.type: Easing.InOutCubic
-                        }
-                    }
-
-                    Behavior on height {
-                        enabled: vertical && taskList.layoutTransitionActive
-                        NumberAnimation {
-                            duration: tasks.layoutAnimationDuration
-                            easing.type: Easing.InOutCubic
-                        }
-                    }
 
                     x: {
                         if (!vertical)
-                            return (parent.width - width) / 2;
+                            return taskList.centerOffset - Kirigami.Units.smallSpacing * 2;
                         return tasks.dockBodyCrossStart;
                     }
 
                     y: {
                         if (vertical)
-                            return (parent.height - height) / 2;
+                            return taskList.centerOffset - Kirigami.Units.smallSpacing * 2;
 
                         return tasks.dockBodyCrossStart;
                     }
@@ -1270,19 +1248,7 @@ PlasmoidItem {
                 property int launchBounceIndex: -1
                 property real launchBounceOffset: 0
                 property bool launchBounceClaimed: false
-                property bool layoutTransitionActive: false
                 readonly property bool launchBounceRunning: launchBounceAnimation.running
-
-                function beginLayoutTransition() {
-                    layoutTransitionActive = true;
-                    layoutTransitionTimer.restart();
-                }
-
-                Timer {
-                    id: layoutTransitionTimer
-                    interval: tasks.layoutAnimationDuration
-                    onTriggered: taskList.layoutTransitionActive = false
-                }
 
                 function startLaunchBounce(index) {
                     if (index < 0 || (launchBounceAnimation.running && launchBounceIndex === index)) {
@@ -1583,14 +1549,6 @@ PlasmoidItem {
 
                         property real itemPos: taskList.itemPosition(index)
 
-                        Behavior on itemPos {
-                            enabled: taskList.layoutTransitionActive
-                            NumberAnimation {
-                                duration: tasks.layoutAnimationDuration
-                                easing.type: Easing.InOutCubic
-                            }
-                        }
-
                         width: tasks.vertical
                         ? tasks.iconSize
                         : (tasks.iconSize * zoomFactor)
@@ -1604,14 +1562,8 @@ PlasmoidItem {
                 Repeater {
                     id: minimizedPreviewRepeater
                     model: minimizedTasksModel
-                    onItemAdded: {
-                        taskList.beginLayoutTransition();
-                        Qt.callLater(tasks.refreshDelegateLayout);
-                    }
-                    onItemRemoved: {
-                        taskList.beginLayoutTransition();
-                        Qt.callLater(tasks.refreshDelegateLayout);
-                    }
+                    onItemAdded: Qt.callLater(tasks.refreshDelegateLayout)
+                    onItemRemoved: Qt.callLater(tasks.refreshDelegateLayout)
 
                     delegate: PreviewTask {
                         required property int index
@@ -1629,14 +1581,8 @@ PlasmoidItem {
                 Repeater {
                     id: desktopPreviewRepeater
                     model: tasks.desktopPreviewTasks
-                    onItemAdded: {
-                        taskList.beginLayoutTransition();
-                        Qt.callLater(tasks.refreshDelegateLayout);
-                    }
-                    onItemRemoved: {
-                        taskList.beginLayoutTransition();
-                        Qt.callLater(tasks.refreshDelegateLayout);
-                    }
+                    onItemAdded: Qt.callLater(tasks.refreshDelegateLayout)
+                    onItemRemoved: Qt.callLater(tasks.refreshDelegateLayout)
 
                     delegate: PreviewTask {
                         required property int index

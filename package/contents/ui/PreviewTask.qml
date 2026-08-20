@@ -71,14 +71,6 @@ PlasmaCore.ToolTipArea {
     mainText: desktopPreview ? taskModel.title : (taskModel.AppName || "")
     subText: desktopPreview ? desktopName : (taskModel.display || "")
 
-    Behavior on itemPos {
-        enabled: dockRef.layoutTransitionActive
-        NumberAnimation {
-            duration: tasksRoot.layoutAnimationDuration
-            easing.type: Easing.InOutCubic
-        }
-    }
-
     Behavior on opacity {
         NumberAnimation {
             duration: tasksRoot.layoutAnimationDuration

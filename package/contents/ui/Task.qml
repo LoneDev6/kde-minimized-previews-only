@@ -72,6 +72,7 @@ PlasmaCore.ToolTipArea {
     property var audioStreams: []
     property bool delayAudioStreamIndicator: false
     property bool completed: false
+    property bool appeared: false
     readonly property bool audioIndicatorsEnabled: Plasmoid.configuration.indicateAudioStreams
     readonly property bool tooltipControlsEnabled: Plasmoid.configuration.tooltipControls
     readonly property bool hasAudioStream: audioStreams.length > 0
@@ -101,9 +102,25 @@ PlasmaCore.ToolTipArea {
 
     // y hace que el panel se expanda elásticamente.
     width: tasksRoot.iconSize
-    height: tasksRoot.activeDockCrossSize
+    height: tasksRoot.dockCrossSize
+    opacity: appeared ? 1 : 0
+    scale: appeared ? 1 : 0.8
     readonly property real baseLongSize: tasksRoot.iconSize
     readonly property int zoomIndex: tasksRoot.visibleTaskIndex(index)
+
+    Behavior on opacity {
+        NumberAnimation {
+            duration: tasksRoot.layoutAnimationDuration
+            easing.type: Easing.InOutCubic
+        }
+    }
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: tasksRoot.layoutAnimationDuration
+            easing.type: Easing.InOutCubic
+        }
+    }
 
     // Desactivamos el recorte para que el zoom y el reflejo "vuelen" fuera
     clip: false
@@ -114,7 +131,7 @@ PlasmaCore.ToolTipArea {
     property Item dockRef: null // Esto recibirá el 'dockMouseArea' de main.qml
 
     readonly property real _baseSize: tasksRoot.iconSize
-    readonly property real _radius: _baseSize * Plasmoid.configuration.amplitud
+    readonly property real _radius: tasksRoot.zoomRadius
     readonly property real _zoom: (Plasmoid.configuration.magnification || 0) / 100
 
     // ---------------------------------------------------------
@@ -147,16 +164,7 @@ PlasmaCore.ToolTipArea {
         return 1.0 + dynamicZoom * (0.5 - 0.5 * Math.cos(Math.PI * influence));
     }
 
-    property real entryProgress: (dockRef && dockRef.insideDock) ? 1.0 : 0.0
-
-    Behavior on entryProgress {
-        enabled: task.completed
-
-        NumberAnimation {
-            duration: 140
-            easing.type: Easing.OutCubic
-        }
-    }
+    readonly property real entryProgress: dockRef ? tasksRoot.zoomProgress : 0
 
     Accessible.name: model.display
     Accessible.description: {
@@ -893,6 +901,7 @@ PlasmaCore.ToolTipArea {
     ]
 
     Component.onCompleted: {
+        appeared = true;
         if (tasksRoot.taskModelReady && model.IsWindow) {
             dockRef?.claimLaunchBounce(zoomIndex);
         }

@@ -144,10 +144,7 @@
       <default>42</default>
     </entry>
     <entry name="magnification" type="Double">
-      <default>90.0</default>
-    </entry>
-    <entry name="amplitud" type="Double">
-      <default>1.8</default>
+      <default>60.0</default>
     </entry>
     <entry name="showOnMetaKey" type="Bool">
       <label>Whether pressing the Meta/Win key should temporarily show the dock when it is hidden.</label>

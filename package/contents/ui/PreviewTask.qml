@@ -33,7 +33,7 @@ PlasmaCore.ToolTipArea {
             Qt.callLater(tasksRoot.refreshDelegateLayout);
         }
     }
-    readonly property real _radius: tasksRoot.iconSize * Plasmoid.configuration.amplitud
+    readonly property real _radius: tasksRoot.zoomRadius
     readonly property real _zoom: (Plasmoid.configuration.magnification || 0) / 100
     readonly property var modelIndex: sourceModel.makeModelIndex(taskIndex)
     readonly property var winId: desktopPreview
@@ -41,7 +41,9 @@ PlasmaCore.ToolTipArea {
         : (taskModel.WinIdList?.length > 0 ? taskModel.WinIdList[0] : undefined)
     readonly property bool thumbnailAvailable: thumbnailLoader.item?.hasThumbnail || false
     property bool completed: false
-    property real entryProgress: dockRef.insideDock ? 1.0 : 0.0
+    property bool appeared: false
+    readonly property real entryProgress: tasksRoot.zoomProgress
+
     property real zoomFactor: {
         const layoutRevision = tasksRoot.delegateLayoutRevision;
         if (_zoom <= 0 || _radius <= 0 || dockRef.smoothMouse < 0
@@ -56,23 +58,38 @@ PlasmaCore.ToolTipArea {
         return 1.0 + _zoom * entryProgress
             * (0.5 - 0.5 * Math.cos(Math.PI * influence));
     }
-    readonly property real itemPos: dockRef.itemPosition(zoomIndex)
+    property real itemPos: dockRef.itemPosition(zoomIndex)
     width: tasksRoot.vertical ? dockRef.width : baseLongSize * zoomFactor
     height: tasksRoot.vertical ? baseLongSize * zoomFactor : dockRef.height
     x: tasksRoot.vertical ? 0 : itemPos
     y: tasksRoot.vertical ? itemPos : 0
+    opacity: appeared ? 1 : 0
+    scale: appeared ? 1 : 0.8
     clip: false
     active: pointer.hovered
     location: Plasmoid.location
     mainText: desktopPreview ? taskModel.title : (taskModel.AppName || "")
     subText: desktopPreview ? desktopName : (taskModel.display || "")
 
-    Behavior on entryProgress {
-        enabled: root.completed
-
+    Behavior on itemPos {
+        enabled: dockRef.layoutTransitionActive
         NumberAnimation {
-            duration: 140
-            easing.type: Easing.OutCubic
+            duration: tasksRoot.layoutAnimationDuration
+            easing.type: Easing.InOutCubic
+        }
+    }
+
+    Behavior on opacity {
+        NumberAnimation {
+            duration: tasksRoot.layoutAnimationDuration
+            easing.type: Easing.InOutCubic
+        }
+    }
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: tasksRoot.layoutAnimationDuration
+            easing.type: Easing.InOutCubic
         }
     }
 
@@ -81,6 +98,7 @@ PlasmaCore.ToolTipArea {
     }
 
     Component.onCompleted: {
+        appeared = true;
         completed = true;
         Qt.callLater(publishGeometry);
     }

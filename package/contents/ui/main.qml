@@ -60,7 +60,8 @@ PlasmoidItem {
     property int delegateLayoutRevision: 0
     function refreshDelegateLayout() {
         ++delegateLayoutRevision;
-        taskList.contentSize = taskList.requestedContentSize;
+        dockSurface.width = Qt.binding(function() { return dockSurface.implicitWidth; });
+        dockSurface.height = Qt.binding(function() { return dockSurface.implicitHeight; });
     }
     readonly property int previewCount: minimizedPreviewRepeater.count + desktopPreviewRepeater.count
     readonly property int visibleTaskCount: taskRepeater.count
@@ -90,7 +91,10 @@ PlasmoidItem {
     Timer {
         interval: 1500
         running: true
-        onTriggered: tasks.taskModelReady = true
+        onTriggered: {
+            tasks.refreshDelegateLayout();
+            tasks.taskModelReady = true;
+        }
     }
 
     // --- META KEY DOCK VISIBILITY ---
@@ -571,7 +575,9 @@ PlasmoidItem {
             const row = rows[0];
             const modelIndex = allPreviewTasksModel.makeModelIndex(row);
             const winIds = allPreviewTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.WinIdList) || [];
-            if (allPreviewTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsMinimized)
+            if ((!allPreviewTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsFullScreen)
+                    && !allPreviewTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsMaximized))
+                    || allPreviewTasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsMinimized)
                     || winIds.length !== 1) {
                 continue;
             }
@@ -702,10 +708,12 @@ PlasmoidItem {
         color: "transparent"
         hideOnWindowDeactivate: false
         visible: tasks.visible
+            && tasks.taskModelReady
             && (tasks.Window.window?.visible ?? false)
             && !tasks.panelOverlapped
             && (!tasks.dockCovered || tasks.edgeReveal || tasks.metaShowActive)
             && !tasks.panelEditing
+        onVisibleChanged: if (visible) Qt.callLater(tasks.refreshDelegateLayout)
         x: {
             const dependency = tasks.x + tasks.width + (tasks.Window.window?.x || 0);
             const globalPosition = tasks.mapToGlobal(0, 0);
@@ -739,6 +747,8 @@ PlasmoidItem {
             implicitHeight: tasks.vertical ? taskList.contentSize : tasks.dockCrossSize
             width: implicitWidth
             height: implicitHeight
+            onImplicitWidthChanged: dockWindow.width = implicitWidth
+            onImplicitHeightChanged: dockWindow.height = implicitHeight
             Layout.minimumWidth: implicitWidth
             Layout.preferredWidth: implicitWidth
             Layout.maximumWidth: implicitWidth
@@ -1293,24 +1303,9 @@ PlasmoidItem {
                 readonly property real zoomExtraSize: _zoom * _radius
                     * (tasks.previewCount > 0 ? tasks.previewLongSize / _baseSize : 1)
 
-                readonly property real requestedContentSize: Math.ceil(
+               readonly property real requestedContentSize: Math.ceil(
                     baseContentSize + zoomExtraSize + spacing * 4)
-                property real contentSize: requestedContentSize
-
-                onRequestedContentSizeChanged: {
-                    if (requestedContentSize >= contentSize) {
-                        contentSizeShrinkTimer.stop();
-                        contentSize = requestedContentSize;
-                    } else {
-                        contentSizeShrinkTimer.restart();
-                    }
-                }
-
-                Timer {
-                    id: contentSizeShrinkTimer
-                    interval: 20
-                    onTriggered: taskList.contentSize = taskList.requestedContentSize
-                }
+                readonly property real contentSize: requestedContentSize
 
                function baseLongSizeAt(index) {
                    return index < tasks.visibleTaskCount ? _baseSize : tasks.previewLongSize;

@@ -98,7 +98,7 @@ PlasmaCore.ToolTipArea {
     }
 
     Component.onCompleted: {
-        appeared = true;
+        Qt.callLater(() => root.appeared = true);
         completed = true;
         Qt.callLater(publishGeometry);
     }

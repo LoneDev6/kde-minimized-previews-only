@@ -52,8 +52,7 @@ PlasmoidItem {
     property Task toolTipAreaItem
     property Task compactToolTipTask
     property bool compactToolTipShown: false
-    readonly property bool zoomInteractionActive:
-        taskList.insideDock || (toolTipAreaItem?.toolTipOpen ?? false)
+    readonly property bool zoomInteractionActive: taskList.insideDock
     property real zoomProgress: zoomInteractionActive ? 1 : 0
 
     Behavior on zoomProgress {
@@ -95,14 +94,19 @@ PlasmoidItem {
     property alias desktopPreviewRepeater: desktopPreviewRepeater
     property var desktopPreviewTasks: []
     property int delegateLayoutRevision: 0
+    property int stableTaskCount: 0
     function refreshDelegateLayout() {
+        const taskCountChanged = stableTaskCount !== taskRepeater.count;
+        stableTaskCount = taskRepeater.count;
+        if (taskModelReady && taskCountChanged) {
+            taskList.beginLayoutTransition();
+        }
         ++delegateLayoutRevision;
-        taskList.syncContentSize();
         dockSurface.width = Qt.binding(() => dockSurface.implicitWidth);
         dockSurface.height = Qt.binding(() => dockSurface.implicitHeight);
     }
     readonly property int previewCount: minimizedPreviewRepeater.count + desktopPreviewRepeater.count
-    readonly property int visibleTaskCount: taskRepeater.count
+    readonly property int visibleTaskCount: stableTaskCount
     readonly property int zoomItemCount: visibleTaskCount + previewCount
     readonly property real previewLongSize: Math.round(tasks.iconSize * 1.55)
     property bool taskModelReady: false
@@ -112,10 +116,10 @@ PlasmoidItem {
     }
 
     function zoomItemAt(index) {
-        if (index < taskRepeater.count) {
+        if (index < visibleTaskCount) {
             return taskRepeater.itemAt(index);
         }
-        index -= taskRepeater.count;
+        index -= visibleTaskCount;
         if (index < minimizedPreviewRepeater.count) {
             return minimizedPreviewRepeater.itemAt(index);
         }
@@ -1274,10 +1278,6 @@ PlasmoidItem {
                     layoutTransitionTimer.restart();
                 }
 
-                function syncContentSize() {
-                    contentSize = requestedContentSize;
-                }
-
                 Timer {
                     id: layoutTransitionTimer
                     interval: tasks.layoutAnimationDuration
@@ -1390,16 +1390,7 @@ PlasmoidItem {
 
                readonly property real requestedContentSize: Math.ceil(
                     baseContentSize + zoomExtraSize + spacing * 4)
-                property real contentSize: 0
-
-                Component.onCompleted: Qt.callLater(syncContentSize)
-
-                Behavior on contentSize {
-                    NumberAnimation {
-                        duration: tasks.layoutAnimationDuration
-                        easing.type: Easing.InOutCubic
-                    }
-                }
+                readonly property real contentSize: requestedContentSize
 
                function baseLongSizeAt(index) {
                    const item = tasks.zoomItemAt(index);
@@ -1445,12 +1436,12 @@ PlasmoidItem {
                }
 
                function pointerInsideZoomedIcon(position) {
-                   for (let i = 0; i < tasks.zoomItemCount; ++i) {
-                       const item = tasks.zoomItemAt(i);
+                   for (let i = 0; i < taskRepeater.count; ++i) {
+                       const item = taskRepeater.itemAt(i);
                        if (!item || item.zoomFactor <= 1) {
                            continue;
                        }
-                       const geometryItem = item.iconGeometryItem ?? item.previewGeometryItem;
+                       const geometryItem = item.iconGeometryItem;
                        const iconPosition = geometryItem?.mapFromItem(taskList, position);
                        if (!geometryItem || !iconPosition) {
                            continue;
@@ -1563,14 +1554,8 @@ PlasmoidItem {
                 Repeater {
                     id: taskRepeater
                     model: tasksModel
-                    onItemAdded: {
-                        taskList.beginLayoutTransition();
-                        Qt.callLater(tasks.refreshDelegateLayout);
-                    }
-                    onItemRemoved: {
-                        taskList.beginLayoutTransition();
-                        Qt.callLater(tasks.refreshDelegateLayout);
-                    }
+                    onItemAdded: Qt.callLater(tasks.refreshDelegateLayout)
+                    onItemRemoved: Qt.callLater(tasks.refreshDelegateLayout)
 
                     delegate: Task {
                         id: taskItem

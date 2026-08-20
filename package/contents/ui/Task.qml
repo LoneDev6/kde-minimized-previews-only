@@ -73,6 +73,7 @@ PlasmaCore.ToolTipArea {
     property bool delayAudioStreamIndicator: false
     property bool completed: false
     property bool appeared: false
+    property bool animateAppearance: false
     readonly property bool audioIndicatorsEnabled: Plasmoid.configuration.indicateAudioStreams
     readonly property bool tooltipControlsEnabled: Plasmoid.configuration.tooltipControls
     readonly property bool hasAudioStream: audioStreams.length > 0
@@ -109,6 +110,7 @@ PlasmaCore.ToolTipArea {
     readonly property int zoomIndex: tasksRoot.visibleTaskIndex(index)
 
     Behavior on opacity {
+        enabled: task.animateAppearance
         NumberAnimation {
             duration: tasksRoot.layoutAnimationDuration
             easing.type: Easing.InOutCubic
@@ -116,6 +118,7 @@ PlasmaCore.ToolTipArea {
     }
 
     Behavior on scale {
+        enabled: task.animateAppearance
         NumberAnimation {
             duration: tasksRoot.layoutAnimationDuration
             easing.type: Easing.InOutCubic
@@ -901,7 +904,12 @@ PlasmaCore.ToolTipArea {
     ]
 
     Component.onCompleted: {
-        appeared = true;
+        animateAppearance = tasksRoot.taskRepeater.count > tasksRoot.visibleTaskCount;
+        if (animateAppearance) {
+            Qt.callLater(() => task.appeared = true);
+        } else {
+            appeared = true;
+        }
         if (tasksRoot.taskModelReady && model.IsWindow) {
             dockRef?.claimLaunchBounce(zoomIndex);
         }

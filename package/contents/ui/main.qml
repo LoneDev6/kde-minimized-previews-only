@@ -53,15 +53,23 @@ PlasmoidItem {
 
     function scheduleCompactToolTip(task) {
         compactToolTipFadeOut.stop();
+        compactToolTipFadeIn.stop();
+        compactToolTipSurface.opacity = 0;
         compactToolTipTask = task;
         compactToolTipShown = true;
-        compactToolTipSurface.opacity = 1;
+        Qt.callLater(() => {
+            if (compactToolTipShown && compactToolTipTask === task) {
+                compactToolTipWindow.followTarget();
+                compactToolTipFadeIn.restart();
+            }
+        });
     }
 
     function hideCompactToolTip(task) {
         if (compactToolTipTask !== task) {
             return;
         }
+        compactToolTipFadeIn.stop();
         compactToolTipShown = false;
         compactToolTipFadeOut.restart();
     }
@@ -162,6 +170,7 @@ PlasmoidItem {
     readonly property real dockBodyLongSize: Math.max(1,
         taskList.baseContentSize + taskList.spacing * 2)
     readonly property real dockBodyPadding: Math.ceil(tasks.iconSize * 0.10)
+        + Kirigami.Units.smallSpacing / 2
     readonly property real dockBodyCrossSize: Math.max(1,
         tasks.iconSize + dockBodyPadding * 2)
     readonly property real dockBodyCrossStart:
@@ -1588,7 +1597,7 @@ PlasmoidItem {
         backgroundHints: PlasmaCore.Dialog.NoBackground
         color: "transparent"
         hideOnWindowDeactivate: false
-        visible: target !== null
+        visible: dockWindow.visible
         x: screenGeometry.x
         y: Plasmoid.location === PlasmaCore.Types.TopEdge
             ? screenGeometry.y
@@ -1683,6 +1692,15 @@ PlasmoidItem {
                 }
             }
         }
+    }
+
+    NumberAnimation {
+        id: compactToolTipFadeIn
+        target: compactToolTipSurface
+        property: "opacity"
+        to: 1
+        duration: 120
+        easing.type: Easing.OutQuad
     }
 
     NumberAnimation {

@@ -78,16 +78,25 @@ PlasmaCore.ToolTipArea {
     readonly property bool hasAudioStream: audioStreams.length > 0
     readonly property bool playingAudio: hasAudioStream && audioStreams.some(item => !item.corked)
     readonly property bool muted: hasAudioStream && audioStreams.every(item => item.muted)
+    readonly property bool usesCompactToolTip: !Plasmoid.configuration.showToolTips || !model.IsWindow
+    readonly property bool demandingAttention: model.IsDemandingAttention
+        || (smartLauncherItem?.urgent ?? false)
+
+    onDemandingAttentionChanged: {
+        if (demandingAttention && completed) {
+            attentionBounceAnimation.restart();
+        }
+    }
 
     readonly property bool highlighted: (inPopup && activeFocus) || (!inPopup && containsMouse)
     || (task.contextMenu && task.contextMenu.status === PlasmaExtras.Menu.Open)
     || (!!tasksRoot.groupDialog && tasksRoot.groupDialog.visualParent === task)
 
-    active: iconHoverHandler.hovered && !inPopup && !tasksRoot.groupDialog
+    active: !usesCompactToolTip && iconHoverHandler.hovered && !inPopup && !tasksRoot.groupDialog
         && task.contextMenu?.status !== PlasmaExtras.Menu.Open
     interactive: model.IsWindow || mainItem.playerData
     location: Plasmoid.location
-    mainItem: !Plasmoid.configuration.showToolTips || !model.IsWindow ? pinnedAppToolTipDelegate : openWindowToolTipDelegate
+    mainItem: openWindowToolTipDelegate
 
     // y hace que el panel se expanda elásticamente.
     width: tasksRoot.iconSize
@@ -424,6 +433,7 @@ PlasmaCore.ToolTipArea {
         onTapped: (eventPoint, button) => leftClick()
 
         function leftClick(): void {
+            tasksRoot.hideCompactToolTip(task);
             if (task.active) {
                 task.hideToolTip();
             }
@@ -583,11 +593,17 @@ PlasmaCore.ToolTipArea {
                 id: iconHoverHandler
                 onHoveredChanged: {
                     if (hovered) {
+                        if (task.usesCompactToolTip) {
+                            tasksRoot.scheduleCompactToolTip(task);
+                            return;
+                        }
                         Qt.callLater(() => {
                             if (iconHoverHandler.hovered) {
                                 task.showToolTip();
                             }
                         });
+                    } else if (task.usesCompactToolTip) {
+                        tasksRoot.hideCompactToolTip(task);
                     }
                 }
             }
@@ -635,13 +651,17 @@ PlasmaCore.ToolTipArea {
 
             SequentialAnimation {
                 id: attentionBounceAnimation
-                running: task.model.IsDemandingAttention
-                    || (task.smartLauncherItem && task.smartLauncherItem.urgent)
-                loops: Animation.Infinite
+                loops: 3
                 alwaysRunToEnd: true
-                onRunningChanged: {
-                    if (running && task.dockRef) {
+                onStarted: {
+                    if (task.dockRef) {
                         task.dockRef.suppressedZoomIndex = task.zoomIndex;
+                    }
+                }
+                onFinished: {
+                    iconBox.bounceOffset = 0;
+                    if (task.dockRef?.suppressedZoomIndex === task.zoomIndex) {
+                        task.dockRef.suppressedZoomIndex = -1;
                     }
                 }
 
@@ -653,7 +673,7 @@ PlasmaCore.ToolTipArea {
                     property: "bounceOffset"
                     from: 0
                     to: attentionBounceAnimation.jumpHeight
-                    duration: 140
+                    duration: 240
                     easing.type: Easing.OutQuad
                 }
 
@@ -662,7 +682,7 @@ PlasmaCore.ToolTipArea {
                     target: iconBox
                     property: "bounceOffset"
                     to: 0
-                    duration: 160
+                    duration: 300
                     easing.type: Easing.InQuad
                 }
             }
@@ -935,8 +955,12 @@ PlasmaCore.ToolTipArea {
             taskInitComponent.createObject(task);
         }
         completed = true;
+        if (demandingAttention) {
+            attentionBounceAnimation.start();
+        }
     }
     Component.onDestruction: {
+        tasksRoot.hideCompactToolTip(task);
         /* if (moveAnim.running) {
          *           (task.parent as TaskList).animationsRunning -= 1;
     } */

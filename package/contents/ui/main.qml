@@ -48,6 +48,23 @@ PlasmoidItem {
 
     property Task toolTipOpenedByClick
     property Task toolTipAreaItem
+    property Task compactToolTipTask
+    property bool compactToolTipShown: false
+
+    function scheduleCompactToolTip(task) {
+        compactToolTipFadeOut.stop();
+        compactToolTipTask = task;
+        compactToolTipShown = true;
+        compactToolTipSurface.opacity = 1;
+    }
+
+    function hideCompactToolTip(task) {
+        if (compactToolTipTask !== task) {
+            return;
+        }
+        compactToolTipShown = false;
+        compactToolTipFadeOut.restart();
+    }
 
     readonly property Component contextMenuComponent: Qt.createComponent("ContextMenu.qml")
     readonly property Component pulseAudioComponent: Qt.createComponent("PulseAudio.qml")
@@ -882,11 +899,6 @@ PlasmoidItem {
             visible: false
         }
 
-        ToolTipDelegate {
-            id: pinnedAppToolTipDelegate
-            visible: false
-        }
-
         Loader {
             id: backgroundLoader
 
@@ -1257,7 +1269,7 @@ PlasmoidItem {
                         property: "launchBounceOffset"
                         from: 0
                         to: taskList._baseSize * 0.35
-                        duration: 180
+                        duration: 240
                         easing.type: Easing.OutQuad
                     }
 
@@ -1265,7 +1277,7 @@ PlasmoidItem {
                         target: taskList
                         property: "launchBounceOffset"
                         to: 0
-                        duration: 220
+                        duration: 300
                         easing.type: Easing.InQuad
                     }
                 }
@@ -1560,6 +1572,159 @@ PlasmoidItem {
             readonly property Component groupDialogComponent: Qt.createComponent("GroupDialog.qml")
             property GroupDialog groupDialog
         }
+    }
+
+    PlasmaCore.Dialog {
+        id: compactToolTipWindow
+
+        readonly property Item target: tasks.compactToolTipTask?.iconGeometryItem ?? null
+        readonly property rect screenGeometry: Plasmoid.containment.screenGeometry
+        readonly property int tipGap: 4
+
+        title: "PearDock App Name"
+        type: PlasmaCore.Dialog.AppletPopup
+        flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+            | Qt.NoDropShadowWindowHint | Qt.WindowTransparentForInput
+        backgroundHints: PlasmaCore.Dialog.NoBackground
+        color: "transparent"
+        hideOnWindowDeactivate: false
+        visible: target !== null
+        x: screenGeometry.x
+        y: Plasmoid.location === PlasmaCore.Types.TopEdge
+            ? screenGeometry.y
+            : screenGeometry.y + screenGeometry.height - height
+
+        function followTarget() {
+            if (!target) {
+                return;
+            }
+
+            const anchor = target.mapToGlobal(target.width / 2,
+                Plasmoid.location === PlasmaCore.Types.TopEdge ? target.height : 0);
+            compactToolTipSurface.x = Math.round(anchor.x - x
+                - compactToolTipSurface.width / 2);
+            compactToolTipSurface.y = Math.round(Plasmoid.location === PlasmaCore.Types.TopEdge
+                ? anchor.y - y + tipGap
+                : anchor.y - y - compactToolTipSurface.height - tipGap);
+        }
+
+        onTargetChanged: Qt.callLater(followTarget)
+        onVisibleChanged: if (visible) Qt.callLater(followTarget)
+        onWidthChanged: if (visible) followTarget()
+        onHeightChanged: if (visible) followTarget()
+
+        mainItem: Item {
+            id: compactToolTipOverlay
+
+            width: compactToolTipWindow.screenGeometry.width
+            height: Math.ceil(tasks.dockCrossSize + tasks.iconSize
+                + compactToolTipSurface.implicitHeight)
+
+            Item {
+                id: compactToolTipSurface
+
+                readonly property bool arrowAtTop: Plasmoid.location === PlasmaCore.Types.TopEdge
+                readonly property int arrowHeight: 7
+                readonly property color fillColor: "#2b2b2b"
+
+                implicitWidth: Math.ceil(compactAppName.implicitWidth)
+                    + Kirigami.Units.smallSpacing * 2
+                implicitHeight: Math.ceil(compactAppName.implicitHeight)
+                    + Kirigami.Units.smallSpacing * 2 + arrowHeight
+                width: implicitWidth
+                height: implicitHeight
+                opacity: 0
+
+                onWidthChanged: if (compactToolTipWindow.visible) compactToolTipWindow.followTarget()
+                onHeightChanged: if (compactToolTipWindow.visible) compactToolTipWindow.followTarget()
+
+                Rectangle {
+                    id: compactBubble
+                    z: 1
+                    y: compactToolTipSurface.arrowAtTop
+                        ? compactToolTipSurface.arrowHeight : 0
+                    width: parent.width
+                    height: parent.height - compactToolTipSurface.arrowHeight
+                    radius: 4
+                    color: compactToolTipSurface.fillColor
+                    border.width: 1
+                    border.color: "#080808"
+                }
+
+                Item {
+                    z: 0
+                    width: 14
+                    height: compactToolTipSurface.arrowHeight + 2
+                    x: (parent.width - width) / 2
+                    y: compactToolTipSurface.arrowAtTop ? 0 : compactBubble.height - 2
+                    clip: true
+                    rotation: compactToolTipSurface.arrowAtTop ? 180 : 0
+
+                    Rectangle {
+                        width: 10
+                        height: 10
+                        x: 2
+                        y: -3
+                        rotation: 45
+                        color: compactToolTipSurface.fillColor
+                        border.width: 1
+                        border.color: "#080808"
+                        antialiasing: true
+                    }
+                }
+
+                PlasmaComponents3.Label {
+                    id: compactAppName
+                    z: 3
+                    anchors.centerIn: compactBubble
+                    text: tasks.compactToolTipTask?.appName ?? ""
+                    color: "#f2f2f2"
+                    textFormat: Text.PlainText
+                }
+            }
+        }
+    }
+
+    NumberAnimation {
+        id: compactToolTipFadeOut
+        target: compactToolTipSurface
+        property: "opacity"
+        to: 0
+        duration: 120
+        easing.type: Easing.OutQuad
+        onFinished: {
+            if (!tasks.compactToolTipShown) {
+                tasks.compactToolTipTask = null;
+            }
+        }
+    }
+
+    Connections {
+        target: compactToolTipWindow.target
+        ignoreUnknownSignals: true
+        enabled: tasks.compactToolTipShown
+
+        function onScaleChanged() { compactToolTipWindow.followTarget(); }
+        function onXChanged() { compactToolTipWindow.followTarget(); }
+        function onYChanged() { compactToolTipWindow.followTarget(); }
+        function onBounceXChanged() { compactToolTipWindow.followTarget(); }
+        function onBounceYChanged() { compactToolTipWindow.followTarget(); }
+    }
+
+    Connections {
+        target: compactToolTipWindow.target?.parent ?? null
+        enabled: tasks.compactToolTipShown
+
+        function onXChanged() { compactToolTipWindow.followTarget(); }
+        function onYChanged() { compactToolTipWindow.followTarget(); }
+    }
+
+    Connections {
+        target: dockWindow
+        enabled: tasks.compactToolTipShown
+
+        function onXChanged() { compactToolTipWindow.followTarget(); }
+        function onYChanged() { compactToolTipWindow.followTarget(); }
     }
 
     Timer {

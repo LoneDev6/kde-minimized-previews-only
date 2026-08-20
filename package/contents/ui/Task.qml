@@ -790,13 +790,25 @@ PlasmaCore.ToolTipArea {
         }
 
         Rectangle {
+            readonly property bool shown: !task.model.IsLauncher && !task.model.IsStartup
+            property bool ready: false
+
             width: 4
             height: 4
             radius: 2
             color: Plasmoid.configuration.skinName === "Light" ? "#30343b" : "white"
-            opacity: 0.9
-            visible: !task.model.IsLauncher && !task.model.IsStartup
+            opacity: ready && shown ? 0.9 : 0
+            visible: opacity > 0
             z: 6
+
+            Component.onCompleted: ready = true
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 280
+                    easing.type: Easing.InOutCubic
+                }
+            }
 
             anchors.horizontalCenter: tasksRoot.vertical ? undefined : iconBox.horizontalCenter
             anchors.verticalCenter: tasksRoot.vertical ? iconBox.verticalCenter : undefined

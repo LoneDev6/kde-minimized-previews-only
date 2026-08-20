@@ -29,23 +29,16 @@ function adjustMargin(height, margin) {
     return margin;
 }
 
-function maxStripes() {
-    const length = tasks.vertical ? tasks.width : tasks.height;
-    const minimum = tasks.vertical ? preferredMinWidth() : preferredMinHeight();
-
-    return Math.min(tasks.plasmoid.configuration.maxStripes, Math.max(1, Math.floor(length / minimum)));
-}
-
 function optimumCapacity(width, height) {
     const length = tasks.vertical ? height : width;
     const maximum = tasks.vertical ? preferredMaxHeight() : preferredMaxWidth();
 
     if (!tasks.vertical) {
         //  Fit more tasks in this case, that is possible to cut text, before combining tasks.
-        return Math.ceil(length / maximum) * maxStripes() + 1;
+        return Math.ceil(length / maximum) + 1;
     }
 
-    return Math.floor(length / maximum) * maxStripes();
+    return Math.floor(length / maximum);
 }
 
 function preferredMinWidth() {
@@ -87,7 +80,7 @@ function preferredMaxWidth() {
     // This allows for one default value for max item width where clutter is
     // reduced at low task counts for tall panels, while leaving low height
     // panels less affected (unaffected at 20px).
-    const laneHeight = tasks.height / maxStripes(); // correct for multiple rows
+    const laneHeight = tasks.height;
     let baseFactor = 1; // sane default in case something goes wrong
     switch (tasks.plasmoid.configuration.taskMaxWidth) {
     case 0: // narrow
@@ -120,7 +113,7 @@ function preferredMaxHeight() {
     if (tasks.vertical) {
         let taskPreferredSize = 0;
         if (tasks.iconsOnly) {
-            taskPreferredSize = tasks.width / maxStripes();
+            taskPreferredSize = tasks.width;
         } else {
             taskPreferredSize = Math.max(Kirigami.Units.iconSizes.sizeForLabels,
                                          Kirigami.Units.iconSizes.medium);
@@ -129,7 +122,7 @@ function preferredMaxHeight() {
             Math.min(
                 // Do not allow the preferred icon size to exceed the width of
                 // the vertical task manager.
-                tasks.width / maxStripes(),
+                tasks.width,
                 taskPreferredSize);
     } else {
         return verticalMargins() +
@@ -161,4 +154,3 @@ function preferredMinLauncherWidth() {
 function maximumContextMenuTextWidth() {
     return (Kirigami.Units.iconSizes.sizeForLabels * 28);
 }
-

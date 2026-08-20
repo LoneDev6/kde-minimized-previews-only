@@ -28,6 +28,11 @@ PlasmaCore.ToolTipArea {
         ? Math.round((tasksRoot.iconSize - 4)
             * (tasksRoot.vertical ? 1 / windowAspectRatio : windowAspectRatio) + 4)
         : tasksRoot.previewLongSize
+    onBaseLongSizeChanged: {
+        if (completed) {
+            Qt.callLater(tasksRoot.refreshDelegateLayout);
+        }
+    }
     readonly property real _radius: tasksRoot.iconSize * Plasmoid.configuration.amplitud
     readonly property real _zoom: (Plasmoid.configuration.magnification || 0) / 100
     readonly property var modelIndex: sourceModel.makeModelIndex(taskIndex)
@@ -38,6 +43,7 @@ PlasmaCore.ToolTipArea {
     property bool completed: false
     property real entryProgress: dockRef.insideDock ? 1.0 : 0.0
     property real zoomFactor: {
+        const layoutRevision = tasksRoot.delegateLayoutRevision;
         if (_zoom <= 0 || _radius <= 0 || dockRef.smoothMouse < 0
                 || dockRef.launchBounceRunning) {
             return 1.0;
@@ -51,7 +57,6 @@ PlasmaCore.ToolTipArea {
             * (0.5 - 0.5 * Math.cos(Math.PI * influence));
     }
     readonly property real itemPos: dockRef.itemPosition(zoomIndex)
-
     width: tasksRoot.vertical ? dockRef.width : baseLongSize * zoomFactor
     height: tasksRoot.vertical ? baseLongSize * zoomFactor : dockRef.height
     x: tasksRoot.vertical ? 0 : itemPos
@@ -181,6 +186,7 @@ PlasmaCore.ToolTipArea {
     }
 
     TapHandler {
+        parent: previewFrame
         acceptedButtons: Qt.LeftButton
         onTapped: {
             root.publishGeometry();
@@ -192,6 +198,7 @@ PlasmaCore.ToolTipArea {
     }
 
     TapHandler {
+        parent: previewFrame
         acceptedButtons: Qt.MiddleButton
         onTapped: {
             if (!root.desktopPreview) {

@@ -58,15 +58,6 @@
       <label>Whether launcher tasks should be hidden when their application is launched.</label>
       <default>true</default>
     </entry>
-    <entry name="maxStripes" type="Int">
-      <label>The maximum number of rows (in a horizontal-orientation containment, i.e. panel) or columns (in a vertical-orientation containment) to layout task buttons in.</label>
-      <default>1</default>
-      <min>1</min>
-    </entry>
-    <entry name="forceStripes" type="Bool">
-      <label>Whether to try and always layout task buttons in as many rows/columns as set via maxStripes.</label>
-      <default>false</default>
-    </entry>
     <entry name="showToolTips" type="Bool">
       <label>Whether to show tooltips when hovering task buttons.</label>
       <default>true</default>
@@ -125,10 +116,6 @@
       <label>Whether to show media and volume controls in the tooltip.</label>
       <default>true</default>
     </entry>
-    <entry name="fill" type="Bool">
-      <label>Whether task manager should occupy all available space.</label>
-      <default>true</default>
-    </entry>
     <entry name="taskHoverEffect" type="Bool">
       <label>Whether task buttons should change in appearance when the mouse pointer is above them.</label>
       <default>true</default>
@@ -161,10 +148,6 @@
     </entry>
     <entry name="amplitud" type="Double">
       <default>1.8</default>
-    </entry>
-    <entry name="showReflection" type="Bool">
-      <label>Show a reflection of the icon below the dock</label>
-      <default>false</default>
     </entry>
     <entry name="showOnMetaKey" type="Bool">
       <label>Whether pressing the Meta/Win key should temporarily show the dock when it is hidden.</label>

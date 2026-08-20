@@ -35,10 +35,9 @@ PlasmaCore.ToolTipArea {
     ? LayoutMetrics.preferredHeightInPopup()
     : (tasksRoot.vertical
     ? LayoutMetrics.preferredMinHeight()
-    : Math.max(tasksRoot.height / Plasmoid.configuration.maxStripes,
-               LayoutMetrics.preferredMinHeight()))
+    : Math.max(tasksRoot.height, LayoutMetrics.preferredMinHeight()))
     implicitWidth: tasksRoot.vertical
-    ? Math.max(LayoutMetrics.preferredMinWidth(), Math.min(LayoutMetrics.preferredMaxWidth(), tasksRoot.width / Plasmoid.configuration.maxStripes))
+    ? Math.max(LayoutMetrics.preferredMinWidth(), Math.min(LayoutMetrics.preferredMaxWidth(), tasksRoot.width))
     : 0
 
     Layout.fillWidth: true
@@ -81,6 +80,7 @@ PlasmaCore.ToolTipArea {
     readonly property bool usesCompactToolTip: !Plasmoid.configuration.showToolTips || !model.IsWindow
     readonly property bool demandingAttention: model.IsDemandingAttention
         || (smartLauncherItem?.urgent ?? false)
+    readonly property alias attentionBounceRunning: attentionBounceAnimation.running
 
     onDemandingAttentionChanged: {
         if (demandingAttention && completed) {
@@ -92,7 +92,8 @@ PlasmaCore.ToolTipArea {
     || (task.contextMenu && task.contextMenu.status === PlasmaExtras.Menu.Open)
     || (!!tasksRoot.groupDialog && tasksRoot.groupDialog.visualParent === task)
 
-    active: !usesCompactToolTip && iconHoverHandler.hovered && !inPopup && !tasksRoot.groupDialog
+    active: !usesCompactToolTip && !tasksRoot.dragSource
+        && iconHoverHandler.hovered && !inPopup && !tasksRoot.groupDialog
         && task.contextMenu?.status !== PlasmaExtras.Menu.Open
     interactive: model.IsWindow || mainItem.playerData
     location: Plasmoid.location
@@ -100,7 +101,7 @@ PlasmaCore.ToolTipArea {
 
     // y hace que el panel se expanda elásticamente.
     width: tasksRoot.iconSize
-    height: tasksRoot.dockCrossSize
+    height: tasksRoot.activeDockCrossSize
     readonly property real baseLongSize: tasksRoot.iconSize
     readonly property int zoomIndex: tasksRoot.visibleTaskIndex(index)
 
@@ -121,6 +122,7 @@ PlasmaCore.ToolTipArea {
     // ---------------------------------------------------------
 
     property real zoomFactor: {
+        const layoutRevision = tasksRoot.delegateLayoutRevision;
 
         if (!dockRef || _zoom <= 0 || _radius <= 0 || dockRef.launchBounceRunning
                 || attentionBounceAnimation.running || dockRef.suppressedZoomIndex === zoomIndex) {
@@ -358,7 +360,8 @@ PlasmaCore.ToolTipArea {
 
     // Will also be called in activateTaskAtIndex(index)
     function updateMainItemBindings(): void {
-        if ((mainItem.parentTask === this && mainItem.rootIndex.row === index)
+        if (tasksRoot.dragSource
+            || (mainItem.parentTask === this && mainItem.rootIndex.row === index)
             || (tasksRoot.toolTipOpenedByClick === null && !active)
             || (tasksRoot.toolTipOpenedByClick !== null && tasksRoot.toolTipOpenedByClick !== this)) {
             return;
@@ -400,6 +403,7 @@ PlasmaCore.ToolTipArea {
 
     TapHandler {
         id: menuTapHandler
+        parent: iconBox
         acceptedButtons: Qt.LeftButton
         acceptedDevices: PointerDevice.TouchScreen | PointerDevice.Stylus
         gesturePolicy: TapHandler.ReleaseWithinBounds
@@ -415,6 +419,7 @@ PlasmaCore.ToolTipArea {
     }
 
     TapHandler {
+        parent: iconBox
         acceptedButtons: Qt.RightButton
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
         gesturePolicy: TapHandler.WithinBounds // Release grab when menu appears
@@ -429,6 +434,7 @@ PlasmaCore.ToolTipArea {
 
     TapHandler {
         id: leftTapHandler
+        parent: iconBox
         acceptedButtons: Qt.LeftButton
         onTapped: (eventPoint, button) => leftClick()
 
@@ -445,6 +451,7 @@ PlasmaCore.ToolTipArea {
     }
 
     TapHandler {
+        parent: iconBox
         acceptedButtons: Qt.MiddleButton | Qt.BackButton | Qt.ForwardButton
         onTapped: (eventPoint, button) => {
             if (button === Qt.MiddleButton) {
@@ -535,6 +542,8 @@ PlasmaCore.ToolTipArea {
         // Avoid repositioning delegate item after dragFinished
         DragHandler {
             id: dragHandler
+            parent: iconBox
+            target: null
             grabPermissions: PointerHandler.CanTakeOverFromHandlersOfDifferentType
 
             function setRequestedInhibitDnd(value: bool): void {
@@ -562,8 +571,7 @@ PlasmaCore.ToolTipArea {
                         dragHelper.Drag.imageSource = result.url;
                         dragHelper.Drag.mimeData = {
                             "text/x-orgkdeplasmataskmanager_taskurl": backend.tryDecodeApplicationsUrl(model.LauncherUrlWithoutIcon).toString(),
-                                     [model.MimeType]: model.MimeData,
-                                     "application/x-orgkdeplasmataskmanager_taskbuttonitem": model.MimeData,
+                            "application/x-orgkdeplasmataskmanager_taskbuttonitem": String(task.index),
                         };
                         dragHelper.Drag.active = dragHandler.active;
                     });
@@ -593,6 +601,9 @@ PlasmaCore.ToolTipArea {
                 id: iconHoverHandler
                 onHoveredChanged: {
                     if (hovered) {
+                        if (tasksRoot.dragSource) {
+                            return;
+                        }
                         if (task.usesCompactToolTip) {
                             tasksRoot.scheduleCompactToolTip(task);
                             return;
@@ -744,80 +755,6 @@ PlasmaCore.ToolTipArea {
 
                 smooth: true
                 antialiasing: true
-            }
-
-            Item {
-                id: reflectionContainer
-
-                visible: Plasmoid.configuration.showReflection
-                opacity: 0.4
-                clip: true
-                z: -5
-
-                width: tasksRoot.vertical
-                ? iconBox.width / 2
-                : iconBox.width
-
-                height: tasksRoot.vertical
-                ? iconBox.height
-                : iconBox.height / 2
-
-                /*
-                 * Compensación 2× en coords locales del hijo: cancela el Translate del padre y aplica el rebote opuesto.
-                 * Se divide por zoomFactor porque x/y sí se escalan y el Translate del padre no.
-                 */
-                readonly property real bounceCompensation: iconBox.effectiveBounceOffset * 2 / zoomFactor
-
-                x: {
-                    switch (Plasmoid.location) {
-
-                        case PlasmaCore.Types.LeftEdge:
-                            return -width - Kirigami.Units.smallSpacing * 2.5 - bounceCompensation
-
-                        case PlasmaCore.Types.RightEdge:
-                            return iconBox.width + Kirigami.Units.smallSpacing * 2.5 + bounceCompensation
-
-                        default:
-                            return 0
-                    }
-                }
-
-                y: {
-                    switch (Plasmoid.location) {
-
-                        case PlasmaCore.Types.TopEdge:
-                            return -height - Kirigami.Units.smallSpacing * 2 - bounceCompensation
-
-                        case PlasmaCore.Types.BottomEdge:
-                            return iconBox.height + Kirigami.Units.smallSpacing * 2 + bounceCompensation
-
-                        default:
-                            return 0
-                    }
-                }
-
-                Kirigami.Icon {
-                    id: reflectionIcon
-
-                    width: icon.width
-                    height: icon.height
-
-                    source: icon.source
-                    smooth: true
-                    antialiasing: true
-
-                    anchors.centerIn: parent
-
-                    scale: icon.scale
-
-                    transform: Scale {
-                        origin.x: reflectionIcon.width / 2
-                        origin.y: reflectionIcon.height / 2
-
-                        xScale: tasksRoot.vertical ? -1 : 1
-                        yScale: tasksRoot.vertical ? 1 : -1
-                    }
-                }
             }
 
             states: [

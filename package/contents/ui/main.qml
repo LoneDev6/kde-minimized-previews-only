@@ -85,8 +85,29 @@ PlasmoidItem {
     property int delegateLayoutRevision: 0
     function refreshDelegateLayout() {
         ++delegateLayoutRevision;
-        dockSurface.width = Qt.binding(function() { return dockSurface.implicitWidth; });
-        dockSurface.height = Qt.binding(function() { return dockSurface.implicitHeight; });
+        dockResizeTimer.restart();
+    }
+    function enforceDockSize() {
+        const wantedWidth = dockSurface.implicitWidth;
+        const wantedHeight = dockSurface.implicitHeight;
+        if (Math.abs(dockWindow.width - wantedWidth) > 0.5) {
+            dockWindow.width = wantedWidth;
+        }
+        if (Math.abs(dockWindow.height - wantedHeight) > 0.5) {
+            dockWindow.height = wantedHeight;
+        }
+        if (Math.abs(dockSurface.width - wantedWidth) > 0.5) {
+            dockSurface.width = wantedWidth;
+        }
+        if (Math.abs(dockSurface.height - wantedHeight) > 0.5) {
+            dockSurface.height = wantedHeight;
+        }
+    }
+
+    Timer {
+        id: dockResizeTimer
+        interval: 0
+        onTriggered: tasks.enforceDockSize()
     }
     readonly property int previewCount: minimizedPreviewRepeater.count + desktopPreviewRepeater.count
     readonly property int visibleTaskCount: taskRepeater.count
@@ -173,9 +194,29 @@ PlasmoidItem {
         + Kirigami.Units.smallSpacing / 2
     readonly property real dockBodyCrossSize: Math.max(1,
         tasks.iconSize + dockBodyPadding * 2)
+    readonly property bool attentionBounceRunning: {
+        for (let i = 0; i < taskRepeater.count; ++i) {
+            if (taskRepeater.itemAt(i)?.attentionBounceRunning) {
+                return true;
+            }
+        }
+        return false;
+    }
+    property real dockExpansionProgress:
+        taskList.insideDock || taskList.launchBounceRunning || attentionBounceRunning ? 1 : 0
+    readonly property real activeDockCrossSize: Math.ceil(
+        dockBodyCrossSize + (dockCrossSize - dockBodyCrossSize) * dockExpansionProgress)
+
+    Behavior on dockExpansionProgress {
+        NumberAnimation {
+            duration: 140
+            easing.type: Easing.OutCubic
+        }
+    }
+
     readonly property real dockBodyCrossStart:
         (tasks.vertical ? tasks.isLeftPanel : tasks.isTopPanel)
-            ? 0 : tasks.dockCrossSize - tasks.dockBodyCrossSize
+            ? 0 : tasks.activeDockCrossSize - tasks.dockBodyCrossSize
     readonly property real dockBodyCrossCenter:
         tasks.dockBodyCrossStart + tasks.dockBodyCrossSize / 2
     readonly property rect dockBodyGeometry: tasks.vertical
@@ -324,8 +365,8 @@ PlasmoidItem {
         }
     }
 
-    Layout.fillWidth: vertical ? true : Plasmoid.configuration.fill
-    Layout.fillHeight: !vertical ? true : Plasmoid.configuration.fill
+    Layout.fillWidth: vertical
+    Layout.fillHeight: !vertical
     Layout.minimumWidth: {
         if (shouldShrinkToZero) {
             return Kirigami.Units.gridUnit;
@@ -362,9 +403,19 @@ PlasmoidItem {
     signal requestLayout
 
     onDragSourceChanged: {
-        if (dragSource === null) {
-            tasksModel.syncLaunchers();
+        if (dragSource !== null) {
+            openWindowToolTipDelegate.blockingUpdates = true;
+            toolTipAreaItem?.hideToolTip();
+            toolTipAreaItem = null;
+            if (compactToolTipTask) {
+                hideCompactToolTip(compactToolTipTask);
+            }
+            return;
         }
+        openWindowToolTipDelegate.rootIndex = undefined;
+        openWindowToolTipDelegate.parentTask = null;
+        openWindowToolTipDelegate.blockingUpdates = false;
+        tasksModel.syncLaunchers();
     }
 
     function windowsHovered(winIds: var, hovered: bool): DBus.DBusPendingReply {
@@ -733,6 +784,18 @@ PlasmoidItem {
         backgroundHints: PlasmaCore.Dialog.NoBackground
         color: "transparent"
         hideOnWindowDeactivate: false
+        width: dockSurface.implicitWidth
+        height: dockSurface.implicitHeight
+        onWidthChanged: {
+            if (Math.abs(width - dockSurface.implicitWidth) > 0.5) {
+                dockResizeTimer.restart();
+            }
+        }
+        onHeightChanged: {
+            if (Math.abs(height - dockSurface.implicitHeight) > 0.5) {
+                dockResizeTimer.restart();
+            }
+        }
         visible: tasks.visible
             && tasks.taskModelReady
             && (tasks.Window.window?.visible ?? false)
@@ -769,24 +832,28 @@ PlasmoidItem {
         mainItem: Item {
             id: dockSurface
 
-            implicitWidth: tasks.vertical ? tasks.dockCrossSize : taskList.contentSize
-            implicitHeight: tasks.vertical ? taskList.contentSize : tasks.dockCrossSize
-            width: implicitWidth
-            height: implicitHeight
-            onImplicitWidthChanged: dockWindow.width = implicitWidth
-            onImplicitHeightChanged: dockWindow.height = implicitHeight
+            implicitWidth: tasks.vertical ? tasks.activeDockCrossSize : taskList.contentSize
+            implicitHeight: tasks.vertical ? taskList.contentSize : tasks.activeDockCrossSize
+            width: dockWindow.width
+            height: dockWindow.height
+            onImplicitWidthChanged: dockResizeTimer.restart()
+            onImplicitHeightChanged: dockResizeTimer.restart()
+            onWidthChanged: {
+                if (Math.abs(width - implicitWidth) > 0.5) {
+                    dockResizeTimer.restart();
+                }
+            }
+            onHeightChanged: {
+                if (Math.abs(height - implicitHeight) > 0.5) {
+                    dockResizeTimer.restart();
+                }
+            }
             Layout.minimumWidth: implicitWidth
             Layout.preferredWidth: implicitWidth
             Layout.maximumWidth: implicitWidth
             Layout.minimumHeight: implicitHeight
             Layout.preferredHeight: implicitHeight
             Layout.maximumHeight: implicitHeight
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.RightButton
-                onClicked: Plasmoid.containment.internalAction("configure").trigger()
-            }
 
         TaskManager.VirtualDesktopInfo {
             id: virtualDesktopInfo
@@ -932,7 +999,6 @@ PlasmoidItem {
                 readonly property real baseIconsSize: taskList.baseContentSize
 
                 readonly property real verticalOffsetX: -Kirigami.Units.smallSpacing * 0.5
-
 
                 readonly property real currentGrowth:
                 Math.max(
@@ -1386,13 +1452,14 @@ PlasmoidItem {
                }
 
                function pointerInsideZoomedIcon(position) {
-                   for (let i = 0; i < taskRepeater.count; ++i) {
-                       const item = taskRepeater.itemAt(i);
+                   for (let i = 0; i < tasks.zoomItemCount; ++i) {
+                       const item = tasks.zoomItemAt(i);
                        if (!item || item.zoomFactor <= 1) {
                            continue;
                        }
-                       const iconPosition = item.iconGeometryItem.mapFromItem(taskList, position);
-                       if (item.iconGeometryItem.contains(iconPosition)) {
+                       const geometryItem = item.iconGeometryItem ?? item.previewGeometryItem;
+                       const iconPosition = geometryItem?.mapFromItem(taskList, position);
+                       if (geometryItem?.contains(iconPosition)) {
                            return true;
                        }
                    }
@@ -1452,7 +1519,7 @@ PlasmoidItem {
 
                 width: {
                     if (tasks.vertical) {
-                        return tasks.dockCrossSize;
+                        return tasks.activeDockCrossSize;
                     }
 
                     return contentSize;
@@ -1463,15 +1530,10 @@ PlasmoidItem {
                         return contentSize;
                     }
 
-                    return tasks.dockCrossSize;
+                    return tasks.activeDockCrossSize;
                 }
 
-                flow: {
-                    if (tasks.vertical) {
-                        return Plasmoid.configuration.forceStripes ? Grid.LeftToRight : Grid.TopToBottom
-                    }
-                    return Plasmoid.configuration.forceStripes ? Grid.TopToBottom : Grid.LeftToRight
-                }
+                flow: tasks.vertical ? Grid.TopToBottom : Grid.LeftToRight
 
                 onAnimatingChanged: {
                     if (!animating) {
@@ -1538,8 +1600,6 @@ PlasmoidItem {
                 Repeater {
                     id: minimizedPreviewRepeater
                     model: minimizedTasksModel
-                    onItemAdded: Qt.callLater(tasks.refreshDelegateLayout)
-                    onItemRemoved: Qt.callLater(tasks.refreshDelegateLayout)
 
                     delegate: PreviewTask {
                         required property int index
@@ -1557,8 +1617,6 @@ PlasmoidItem {
                 Repeater {
                     id: desktopPreviewRepeater
                     model: tasks.desktopPreviewTasks
-                    onItemAdded: Qt.callLater(tasks.refreshDelegateLayout)
-                    onItemRemoved: Qt.callLater(tasks.refreshDelegateLayout)
 
                     delegate: PreviewTask {
                         required property int index

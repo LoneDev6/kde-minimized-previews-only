@@ -1007,6 +1007,31 @@ PlasmoidItem {
                     id: backgroundItem
                     readonly property bool light: Plasmoid.configuration.skinName === "Light"
 
+                    function updateBlur() {
+                        if (!dockWindow.visible || width <= 0 || height <= 0) {
+                            return;
+                        }
+                        const pos = mapToItem(null, 0, 0);
+                        backend.setBlurBehind(dockWindow, true,
+                            pos.x, pos.y, width, height, radius);
+                    }
+
+                    Component.onCompleted: Qt.callLater(updateBlur)
+                    onXChanged: Qt.callLater(updateBlur)
+                    onYChanged: Qt.callLater(updateBlur)
+                    onWidthChanged: Qt.callLater(updateBlur)
+                    onHeightChanged: Qt.callLater(updateBlur)
+                    onRadiusChanged: Qt.callLater(updateBlur)
+
+                    Connections {
+                        target: dockWindow
+                        function onVisibleChanged() { Qt.callLater(backgroundItem.updateBlur); }
+                    }
+                    Connections {
+                        target: tasks
+                        function onSkinParamsChanged() { Qt.callLater(backgroundItem.updateBlur); }
+                    }
+
                     z: -1
                     radius: Math.min(width, height) * 0.28
                     color: light

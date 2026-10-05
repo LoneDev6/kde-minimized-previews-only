@@ -30,19 +30,21 @@ this package; installation does not copy or patch another plasmoid.
 
 ## KWin Glass compatibility
 
-If [KWin Glass](https://github.com/4v3ngR/kwin-effects-glass) is installed,
-add `org.kde.plasmashell` to **Window classes** in the Glass settings and select
-**Blur all except matching**. This prevents Glass from filling PearDock's
-transparent zoom area. Keep any classes already present in that list. If the
-list is empty, the equivalent command is:
+PearDock requests blur only behind its visible background. When Glass has
+**Ignore content blur region** or forced decoration blur enabled, Glass must
+exclude the window titled `PearDock` from those overrides and honor its declared
+blur region. The [PearDock Glass build](https://github.com/LoneDev6/kwin-glass-peardock)
+contains both exceptions; access to that private repository is required.
 
-```bash
-kwriteconfig6 --file kwinrc --group Effect-blurplus \
-  --key WindowClasses org.kde.plasmashell
-```
+Keep Plasma out of Glass's excluded window classes so the Start menu can also
+blur, and disable the stock Blur effect when using Glass. After upgrading Glass,
+log out and log back in: unloading and reloading the effect can leave the old
+library in KWin's memory.
 
-Disable and re-enable the Glass desktop effect after applying the change. Glass
-will remain enabled for other applications.
+The larger transparent dock surface remains available for magnified icons.
+Hover previews use separate popup windows, while icon zoom stays in the dock
+surface. Upgrading PearDock with `./install.sh` preserves the existing applet
+configuration and launchers.
 
 ## Remove
 

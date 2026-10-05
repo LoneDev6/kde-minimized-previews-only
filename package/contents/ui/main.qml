@@ -545,7 +545,7 @@ PlasmoidItem {
         screenGeometry: Plasmoid.containment.screenGeometry
         activity: activityInfo.currentActivity
         filterByVirtualDesktop: false
-        filterByScreen: true
+        filterByScreen: false
         filterByActivity: true
         filterNotMinimized: true
         hideActivatedLaunchers: true

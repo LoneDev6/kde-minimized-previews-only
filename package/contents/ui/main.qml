@@ -1369,7 +1369,7 @@ PlasmoidItem {
                    + Math.max(0, tasks.zoomItemCount - 1) * spacing
 
                readonly property real largestBaseLongSize: {
-                   let largest = _baseSize;
+                   let largest = _baseSize + tasks.delegateLayoutRevision * 0;
                    for (let i = 0; i < tasks.zoomItemCount; ++i) {
                        largest = Math.max(largest, baseLongSizeAt(i));
                    }
